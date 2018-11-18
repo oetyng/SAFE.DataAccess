@@ -8,7 +8,7 @@ namespace SAFE.DataAccess
 {
     public class Indexer : Database, IIndexer
     {
-        Dictionary<string, string[]> _paths = new Dictionary<string, string[]>();
+        ConcurrentDictionary<string, string[]> _paths = new ConcurrentDictionary<string, string[]>();
 
         Indexer(IMd info, TypeStoreInfo typeStore)
             : base(info, typeStore, new InactiveIndexer())
@@ -28,9 +28,9 @@ namespace SAFE.DataAccess
             indexer._dataTreeAddresses = typeStores
                 .ToDictionary(c => c.Item1, c => c.Item2);
 
-            indexer._paths = indexer._dataTreeAddresses
+            indexer._paths = new ConcurrentDictionary<string, string[]>(indexer._dataTreeAddresses
                 .Where(c => c.Key.Count(t => t == '/') == 2) // ayy.. must be better than this
-                .ToDictionary(c => c.Key, c => c.Key.Split('/')[1].Split('.'));
+                .ToDictionary(c => c.Key, c => c.Key.Split('/')[1].Split('.')));
 
             return indexer;
         }
@@ -42,14 +42,13 @@ namespace SAFE.DataAccess
 
         public Task CreateIndexAsync<T>(string[] propertyPath, IEnumerable<(Pointer, Value)> pointerValues)
         {
-            var dict = new ConcurrentDictionary<string, string[]>();
             var tasks = pointerValues.Select(async data =>
             {
                 var key = await TryIndexWithPath(
                     propertyPath,
                     data.Item2.Payload.Parse(),
                     data.Item1).ConfigureAwait(false);
-                dict[key] = propertyPath;
+                _paths[key] = propertyPath;
             });
             return Task.WhenAll(tasks);
         }
