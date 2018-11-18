@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace SAFE.DataAccess
 {
@@ -9,56 +10,51 @@ namespace SAFE.DataAccess
     // with connections via Maidsafe's SafeApp library.
     public class Md : IMd
     {
-        static Dictionary<string, Md> _allMds = new Dictionary<string, Md>();
+        static Dictionary<string, IMd> _allMds = new Dictionary<string, IMd>();
 
-        const string TYPE_KEY = "TYPE";
-        const string LEVEL_KEY = "LEVEL";
         Dictionary<string, Value> _valueFields = new Dictionary<string, Value>();
         Dictionary<int, Pointer> _pointerFields = new Dictionary<int, Pointer>();
-        Metadata _metadata;
+        MdMetadata _metadata;
 
-        Metadata Metadata
+        MdMetadata Metadata
         {
             get
             {
                 if (_metadata == null)
-                    _metadata = _valueFields["metadata"].Payload.Parse<Metadata>();
+                    _metadata = _valueFields["metadata"].Payload.Parse<MdMetadata>();
                 return _metadata;
             }
         }
 
-        public byte[] XORAddress => Metadata.XORAddress;
         public int Level => Metadata.Level;
         public int Count => Metadata.Count;
-        public bool IsFull => Metadata.Count > Metadata.Capacity;
-        public MdType Type => Metadata.Get<MdType>(TYPE_KEY);
+        public byte[] XORAddress => Metadata.XORAddress;
+        public bool IsFull => Metadata.Count > MdMetadata.Capacity;
+        public MdType Type => Metadata.Type;
 
         private Md(int level)
         {
             _valueFields["metadata"] = new Value
             {
-                Payload = new Metadata(level).Json(),
-                ValueType = typeof(Metadata).Name
+                Payload = new MdMetadata(level).Json(),
+                ValueType = typeof(MdMetadata).Name
             };
-            Metadata.Set(TYPE_KEY, level == 0 ? MdType.Values : MdType.Pointers);
-            
+
             var xor = new byte[32];
             _rand.NextBytes(xor);
-            Metadata.Set(Metadata.XOR_ADDRESS_KEY, xor);
+            Metadata.Set(MdMetadata.XOR_ADDRESS_KEY, xor);
         }
 
         Random _rand = new Random();
         // level 0 gives new leaf 
-        public static Md Create(int level)
+        public static IMd Create(int level)
         {
             var newMd = new Md(level);
             _allMds[newMd.XORAddress.Json()] = newMd;
-            //newMd.Metadata.Set(LEVEL_KEY, level);
-            //newMd.Metadata.Set(TYPE_KEY, level == 0 ? MdType.Values : MdType.Pointers);
             return newMd;
         }
 
-        public static Md Locate(byte[] xorAddress)
+        public static IMd Locate(byte[] xorAddress)
         {
             // try find on network
             var key = xorAddress.Json();
@@ -72,17 +68,22 @@ namespace SAFE.DataAccess
             return _allMds[key];
         }
 
-        public IEnumerable<(Pointer, Value)> GetAllPointerValues()
+        public Task<IEnumerable<(Pointer, Value)>> GetAllPointerValuesAsync()
+        {
+            return Task.FromResult(GetAllPointerValues());
+        }
+
+        IEnumerable<(Pointer, Value)> GetAllPointerValues()
         {
             switch (Type)
             {
                 case MdType.Pointers:
                     return _pointerFields.Values
                         .Select(c => Locate(c.XORAddress))
-                        .SelectMany(c => c.GetAllPointerValues());
+                        .SelectMany(c => (c as Md).GetAllPointerValues());
                 case MdType.Values:
                     return _valueFields
-                        .Where(c => c.Value.ValueType != typeof(Metadata).Name)
+                        .Where(c => c.Value.ValueType != typeof(MdMetadata).Name)
                         .Select(c => (new Pointer
                         {
                             XORAddress = this.XORAddress,
@@ -94,24 +95,34 @@ namespace SAFE.DataAccess
             }
         }
 
-        public IEnumerable<Value> GetValues()
+        public Task<IEnumerable<Value>> GetAllValuesAsync()
+        {
+            return Task.FromResult(GetAllValues());
+        }
+
+        IEnumerable<Value> GetAllValues()
         {
             switch (Type)
             {
                 case MdType.Pointers:
                     return _pointerFields.Values
                         .Select(c => Locate(c.XORAddress))
-                        .SelectMany(c => c.GetValues());
+                        .SelectMany(c => (c as Md).GetAllValues());
                 case MdType.Values:
                     return _valueFields
                         .Select(c => c.Value)
-                        .Where(c => c.ValueType != typeof(Metadata).Name);
+                        .Where(c => c.ValueType != typeof(MdMetadata).Name);
                 default:
                     throw new ArgumentOutOfRangeException(nameof(Type));
             }
         }
 
-        public Result<Value> GetValue(string key)
+        public Task<Result<Value>> GetValueAsync(string key)
+        {
+            return Task.FromResult(GetValue(key));
+        }
+
+        Result<Value> GetValue(string key)
         {
             switch(Type)
             {
@@ -128,7 +139,12 @@ namespace SAFE.DataAccess
             }
         }
 
-        public Result<(Pointer, Value)> GetPointerAndValue(string key)
+        public Task<Result<(Pointer, Value)>> GetPointerAndValueAsync(string key)
+        {
+            return Task.FromResult(GetPointerAndValue(key));
+        }
+
+        Result<(Pointer, Value)> GetPointerAndValue(string key)
         {
             switch (Type)
             {
@@ -152,17 +168,28 @@ namespace SAFE.DataAccess
             }
         }
 
-        public Result<Pointer> Add(Pointer pointer)
+        public Task<Result<Pointer>> AddAsync(Pointer pointer)
+        {
+            return Task.FromResult(Add(pointer));
+        }
+
+        Result<Pointer> Add(Pointer pointer)
         {
             if (IsFull)
-                return new MdOutOfEntriesError<Pointer>($"Filled: {Metadata.Count}/{Metadata.Capacity}");
+                return new MdOutOfEntriesError<Pointer>($"Filled: {Metadata.Count}/{MdMetadata.Capacity}");
             var index = Count + 1;
+            pointer.MdKey = index.ToString();
             _pointerFields[index] = pointer;
             _metadata.IncrementCount();
             return Result.OK(pointer);
         }
 
-        public Result<Pointer> Set(string key, Value value)
+        public Task<Result<Pointer>> SetAsync(string key, Value value, long expectedVersion = -1)
+        {
+            return Task.FromResult(Set(key, value));
+        }
+
+        Result<Pointer> Set(string key, Value value)
         {
             switch (Type)
             {
@@ -181,7 +208,12 @@ namespace SAFE.DataAccess
             }
         }
 
-        public Result<Pointer> Delete(string key)
+        public Task<Result<Pointer>> DeleteAsync(string key)
+        {
+            return Task.FromResult(Delete(key));
+        }
+
+        Result<Pointer> Delete(string key)
         {
             switch (Type)
             {
@@ -203,12 +235,17 @@ namespace SAFE.DataAccess
             }
         }
 
+        public Task<Result<Pointer>> AddAsync(string key, Value value)
+        {
+            return Task.FromResult(Add(key, value));
+        }
+
         // It will return the direct pointer to the stored value
         // which makes it readily available for indexing at higher levels.
-        public Result<Pointer> Add(string key, Value value)
+        Result<Pointer> Add(string key, Value value)
         {
             if (IsFull)
-                return new MdOutOfEntriesError<Pointer>($"Filled: {Metadata.Count}/{Metadata.Capacity}");
+                return new MdOutOfEntriesError<Pointer>($"Filled: {Metadata.Count}/{MdMetadata.Capacity}");
             switch (Type)
             {
                 case MdType.Pointers:
@@ -219,7 +256,7 @@ namespace SAFE.DataAccess
                     if (target.IsFull) 
                         return ExpandLevel(key, value);
 
-                    return target.Add(key, value);
+                    return (target as Md).Add(key, value);
                 case MdType.Values:
                     if (_valueFields.ContainsKey(key))
                         return new ValueAlreadyExists<Pointer>($"Key: {key}.");
@@ -243,7 +280,7 @@ namespace SAFE.DataAccess
                 return new ArgumentOutOfRange<Pointer>(nameof(Level));
 
             var md = Md.Create(Level - 1);
-            var leafPointer = md.Add(key, value);
+            var leafPointer = (md as Md).Add(key, value);
             if (!leafPointer.HasValue)
                 return leafPointer;
 

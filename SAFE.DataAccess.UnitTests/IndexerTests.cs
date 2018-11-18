@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Threading.Tasks;
 
 namespace SAFE.DataAccess.UnitTests
 {
@@ -8,8 +9,8 @@ namespace SAFE.DataAccess.UnitTests
         [TestInitialize]
         public void TestInitialize()
         {
-            MdAccess.SetCreator(Md.Create);
-            MdAccess.SetLocator(Md.Locate);
+            MdAccess.SetCreator(level => Task.FromResult(Md.Create(level)));
+            MdAccess.SetLocator(xor => Task.FromResult(Md.Locate(xor)));
         }
     }
 }

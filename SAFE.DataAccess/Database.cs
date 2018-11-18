@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace SAFE.DataAccess
 {
@@ -21,25 +22,25 @@ namespace SAFE.DataAccess
             _indexer = indexer;
         }
 
-        public static Result<Database> GetOrAdd(string id, IIndexer indexer)
+        public static async Task<Result<Database>> GetOrAddAsync(string id, IIndexer indexer)
         {
-            var dbInfoMd = MdAccess.Locate(System.Text.Encoding.UTF8.GetBytes(id));
-            var typeInfo = TypeStoreInfoFactory.GetOrAddTypeStore(dbInfoMd, id);
+            var dbInfoMd = await MdAccess.LocateAsync(System.Text.Encoding.UTF8.GetBytes(id)).ConfigureAwait(false);
+            var typeInfo = await TypeStoreInfoFactory.GetOrAddTypeStoreAsync(dbInfoMd, id).ConfigureAwait(false);
 
             var db = new Database(dbInfoMd, typeInfo, indexer);
 
-            var typeStores = typeInfo.GetAll();
+            var typeStores = await typeInfo.GetAllAsync().ConfigureAwait(false);
             db._dataTreeAddresses = typeStores
                 .ToDictionary(c => c.Item1, c => c.Item2);
 
             return Result.OK(db);
         }
 
-        public Result<T> FindByKey<T>(string key)
+        public async Task<Result<T>> FindByKeyAsync<T>(string key)
         {
             var type = typeof(T).Name;
             var indexKey = $"{type}/{key}";
-            var (data, errors) = _indexer.GetAllValues<T>(indexKey);
+            var (data, errors) = await _indexer.GetAllValuesAsync<T>(indexKey).ConfigureAwait(false);
             var list = data.ToList();
             if (list.Count == 0)
                 return new KeyNotFound<T>(string.Join(',', errors));
@@ -48,80 +49,81 @@ namespace SAFE.DataAccess
             return Result.OK(list.Single());
         }
 
-        public (IEnumerable<T> data, IEnumerable<string> errors) Find<T>(string whereProperty, object isValue)
+        public Task<(IEnumerable<T> data, IEnumerable<string> errors)> FindAsync<T>(string whereProperty, object isValue)
         {
             var indexKey = $"{whereProperty}/{isValue}";
-            return _indexer.GetAllValues<T>(indexKey);
+            return _indexer.GetAllValuesAsync<T>(indexKey);
         }
 
         // Scan. Not recommended to be used with any larger amounts of data.
-        public IEnumerable<T> GetAll<T>()
+        public async Task<IEnumerable<T>> GetAllAsync<T>()
         {
             var type = typeof(T).Name;
             if (!_dataTreeCache.ContainsKey(type))
-                LoadStore(type);
+                await LoadStoreAsync(type).ConfigureAwait(false);
 
-            var data = _dataTreeCache[type]
-                .GetAllValues()
+            var data = (await _dataTreeCache[type]
+                .GetAllValuesAsync().ConfigureAwait(false))
                 .Select(c => c.Payload.Parse<T>());
 
             return data;
         }
 
-        public void CreateIndex<T>(string[] propertyPath)
+        public async Task CreateIndex<T>(string[] propertyPath)
         {
             var type = typeof(T).Name;
 
             if (!_dataTreeCache.ContainsKey(type))
-                LoadStore(type);
+                await LoadStoreAsync(type).ConfigureAwait(false);
 
-            var pointerValues = _dataTreeCache[type]
-                .GetAllPointerValues();
+            var pointerValues = await _dataTreeCache[type]
+                .GetAllPointerValuesAsync()
+                .ConfigureAwait(false);
 
-            _indexer.CreateIndex<T>(propertyPath, pointerValues);
+            await _indexer.CreateIndexAsync<T>(propertyPath, pointerValues).ConfigureAwait(false);
         }
 
-        public Result<Pointer> Add<T>(string key, T data)
+        public Task<Result<Pointer>> AddAsync<T>(string key, T data)
         {
-            return Add(key, (object)data);
+            return AddAsync(key, (object)data);
         }
 
-        public Result<Pointer> Add(string key, object data)
+        public async Task<Result<Pointer>> AddAsync(string key, object data)
         {
             var type = data.GetType().Name;
 
             if (!_dataTreeAddresses.ContainsKey(type))
-                AddStore(type);
+                await AddStoreAsync(type).ConfigureAwait(false);
 
             var value = new Value
             {
                 Payload = data.Json(),
                 ValueType = type
             };
-            var pointer = _dataTreeCache[type].Add(key, value);
+            var pointer = await _dataTreeCache[type].AddAsync(key, value).ConfigureAwait(false);
 
             if (!pointer.HasValue)
                 return pointer;
 
-            IndexOnKey(type, key, pointer.Value);
-            TryIndexProperties(data, pointer.Value);
+            await IndexOnKey(type, key, pointer.Value).ConfigureAwait(false);
+            await TryIndexProperties(data, pointer.Value).ConfigureAwait(false);
 
             return pointer;
         }
 
-        public Result<T> Update<T>(string key, T newValue)
+        public async Task<Result<T>> Update<T>(string key, T newValue)
         {
-            var findResult = FindValuePointerByKey<T>(key);
+            var findResult = await FindValuePointerByKeyAsync<T>(key).ConfigureAwait(false);
             if (!findResult.HasValue)
                 return Result.Fail<T>(findResult.ErrorCode.Value, findResult.ErrorMsg);
 
             // modify md key
-            var md = MdAccess.Locate(findResult.Value.XORAddress);
-            var setResult = md.Set(key, new Value
+            var md = await MdAccess.LocateAsync(findResult.Value.XORAddress).ConfigureAwait(false);
+            var setResult = await md.SetAsync(key, new Value
             {
                 Payload = newValue.Json(),
                 ValueType = typeof(T).Name
-            });
+            }).ConfigureAwait(false);
             if (setResult.HasValue)
                 return Result.OK(newValue);
             else
@@ -130,24 +132,24 @@ namespace SAFE.DataAccess
             // TODO: re-index
         }
 
-        public Result<Pointer> Delete<T>(string key) // What to return? Result<(Pointer, Value)>, Result<Pointer>, Result<Value>, Result<T>
+        public async Task<Result<Pointer>> Delete<T>(string key) // What to return? Result<(Pointer, Value)>, Result<Pointer>, Result<Value>, Result<T>
         {
-            var findResult = FindValuePointerByKey<T>(key);
+            var findResult = await FindValuePointerByKeyAsync<T>(key).ConfigureAwait(false);
             if (!findResult.HasValue)
                 return findResult;
 
-            var md = MdAccess.Locate(findResult.Value.XORAddress);
-            var deleteResult = md.Delete(key);
+            var md = await MdAccess.LocateAsync(findResult.Value.XORAddress).ConfigureAwait(false);
+            var deleteResult = await md.DeleteAsync(key).ConfigureAwait(false);
             return deleteResult;
 
             // TODO: re-index
         }
 
-        Result<Pointer> FindValuePointerByKey<T>(string key)
+        async Task<Result<Pointer>> FindValuePointerByKeyAsync<T>(string key)
         {
             var type = typeof(T).Name;
             var indexKey = $"{type}/{key}";
-            var (data, errors) = _indexer.GetAllPointersWithValues(indexKey);
+            var (data, errors) = await _indexer.GetAllPointersWithValuesAsync(indexKey).ConfigureAwait(false);
             var list = data.ToList();
             if (list.Count == 0)
                 return new KeyNotFound<Pointer>(string.Join(',', errors));
@@ -157,51 +159,51 @@ namespace SAFE.DataAccess
         }
 
         // 1. Index on the type and key
-        void IndexOnKey(string type, string key, Pointer valuePointer)
+        Task IndexOnKey(string type, string key, Pointer valuePointer)
         {
             var indexKey = $"{type}/{key}";
-            _indexer.Index(indexKey, valuePointer);
+            return _indexer.IndexAsync(indexKey, valuePointer);
         }
 
         // 2. Find any other indices
-        void TryIndexProperties(object data, Pointer valuePointer)
+        Task TryIndexProperties(object data, Pointer valuePointer)
         {
-            _indexer.TryIndex(data, valuePointer);
+            return _indexer.TryIndexAsync(data, valuePointer);
         }
 
-        void AddStore<T>()
+        Task AddStoreAsync<T>()
         {
             var type = typeof(T).Name;
-            AddStore(type);
+            return AddStoreAsync(type);
         }
 
-        protected void AddStore(string type)
+        protected async Task AddStoreAsync(string type)
         {
             if (_dataTreeAddresses.ContainsKey(type))
                 return;
 
-            void onHeadChange(byte[] newXOR) => UpdateTypeStores(type, newXOR);
+            Task onHeadChange(byte[] newXOR) => UpdateTypeStores(type, newXOR);
             
-            var dataTree = DataTreeFactory.Create(onHeadChange);
+            var dataTree = await DataTreeFactory.CreateAsync(onHeadChange).ConfigureAwait(false);
             _dataTreeCache[type] = dataTree;
             _dataTreeAddresses[type] = dataTree.XORAddress;
-            _typeInfo.Add(type, dataTree.XORAddress);
+            await _typeInfo.AddAsync(type, dataTree.XORAddress).ConfigureAwait(false);
         }
 
-        protected void LoadStore(string type)
+        protected async Task LoadStoreAsync(string type)
         {
             if (!_dataTreeAddresses.ContainsKey(type))
                 throw new InvalidOperationException($"Store does not exist! {type}");
 
-            void onHeadChange(byte[] newXOR) => UpdateTypeStores(type, newXOR);
-            var head = MdAccess.Locate(_dataTreeAddresses[type]);
+            Task onHeadChange(byte[] newXOR) => UpdateTypeStores(type, newXOR);
+            var head = await MdAccess.LocateAsync(_dataTreeAddresses[type]).ConfigureAwait(false);
             var dataTree = new DataTree(head, onHeadChange);
             _dataTreeCache[type] = dataTree;
         }
 
-        void UpdateTypeStores(string type, byte[] XORAddress)
+        async Task UpdateTypeStores(string type, byte[] XORAddress)
         {
-            _typeInfo.Update(type, XORAddress);
+            await _typeInfo.UpdateAsync(type, XORAddress).ConfigureAwait(false);
             _dataTreeAddresses[type] = XORAddress;
         }
     }

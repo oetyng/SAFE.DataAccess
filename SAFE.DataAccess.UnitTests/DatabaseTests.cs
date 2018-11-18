@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace SAFE.DataAccess.UnitTests
 {
@@ -9,19 +10,19 @@ namespace SAFE.DataAccess.UnitTests
         [TestInitialize]
         public void TestInitialize()
         {
-            MdAccess.SetCreator(Md.Create);
-            MdAccess.SetLocator(Md.Locate);
+            MdAccess.SetCreator(level => Task.FromResult(Md.Create(level)));
+            MdAccess.SetLocator(xor => Task.FromResult(Md.Locate(xor)));
         }
 
         [TestMethod]
-        public void DatabaseTests_getoradd_returns_database()
+        public async Task DatabaseTests_getoradd_returns_database()
         {
             // Arrange
             var dbId = "theDb";
-            var indexer = Indexer.Create(dbId);
+            var indexer = await Indexer.CreateAsync(dbId).ConfigureAwait(false);
 
             // Act
-            var dbResult = Database.GetOrAdd(dbId, indexer);
+            var dbResult = await Database.GetOrAddAsync(dbId, indexer).ConfigureAwait(false);
 
             // Assert
             Assert.IsNotNull(dbResult);
@@ -30,17 +31,17 @@ namespace SAFE.DataAccess.UnitTests
         }
 
         [TestMethod]
-        public void DatabaseTests_add_returns_pointer()
+        public async Task DatabaseTests_add_returns_pointer()
         {
             // Arrange
             var dbId = "theDb";
-            var indexer = Indexer.Create(dbId);
-            var dbResult = Database.GetOrAdd(dbId, indexer);
+            var indexer = await Indexer.CreateAsync(dbId).ConfigureAwait(false);
+            var dbResult = await Database.GetOrAddAsync(dbId, indexer).ConfigureAwait(false);
             var theKey = "theKey";
             var theData = 42;
 
             // Act
-            var addResult = dbResult.Value.Add(theKey, theData);
+            var addResult = await dbResult.Value.AddAsync(theKey, theData).ConfigureAwait(false);
 
             // Assert
             Assert.IsNotNull(addResult);
@@ -49,18 +50,18 @@ namespace SAFE.DataAccess.UnitTests
         }
 
         [TestMethod]
-        public void DatabaseTests_returns_stored_value()
+        public async Task DatabaseTests_returns_stored_value()
         {
             // Arrange
             var dbId = "theDb";
-            var indexer = Indexer.Create(dbId);
-            var dbResult = Database.GetOrAdd(dbId, indexer);
+            var indexer = await Indexer.CreateAsync(dbId).ConfigureAwait(false);
+            var dbResult = await Database.GetOrAddAsync(dbId, indexer).ConfigureAwait(false);
             var theKey = "theKey";
             var theData = 42;
-            var addResult = dbResult.Value.Add(theKey, theData);
+            var addResult = await dbResult.Value.AddAsync(theKey, theData).ConfigureAwait(false);
 
             // Act
-            var findResult = dbResult.Value.FindByKey<int>(theKey);
+            var findResult = await dbResult.Value.FindByKeyAsync<int>(theKey).ConfigureAwait(false);
 
             // Assert
             Assert.IsNotNull(findResult);
@@ -70,13 +71,13 @@ namespace SAFE.DataAccess.UnitTests
         }
 
         [TestMethod]
-        public void DatabaseTests_adds_more_than_md_capacity()
+        public async Task DatabaseTests_adds_more_than_md_capacity()
         {
             // Arrange
             var dbId = "theDb";
-            var indexer = Indexer.Create(dbId);
-            var dbResult = Database.GetOrAdd(dbId, indexer);
-            var addCount = 5.3 * Metadata.Capacity;
+            var indexer = await Indexer.CreateAsync(dbId).ConfigureAwait(false);
+            var dbResult = await Database.GetOrAddAsync(dbId, indexer).ConfigureAwait(false);
+            var addCount = 5.3 * MdMetadata.Capacity;
 
             for (int i = 0; i < addCount; i++)
             {
@@ -84,7 +85,7 @@ namespace SAFE.DataAccess.UnitTests
                 var theData = i;
 
                 // Act
-                var addResult = dbResult.Value.Add(theKey, theData);
+                var addResult = await dbResult.Value.AddAsync(theKey, theData).ConfigureAwait(false);
 
                 // Assert 1
                 Assert.IsNotNull(addResult);
@@ -93,7 +94,7 @@ namespace SAFE.DataAccess.UnitTests
             }
 
             // Assert 2
-            var data = dbResult.Value.GetAll<int>().ToList();
+            var data = (await dbResult.Value.GetAllAsync<int>().ConfigureAwait(false)).ToList();
             Assert.IsNotNull(data);
             Assert.AreEqual(addCount, data.Count);
         }

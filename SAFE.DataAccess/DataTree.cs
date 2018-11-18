@@ -1,49 +1,50 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace SAFE.DataAccess
 {
     public class DataTree
     {
         IMd _head;
-        Action<byte[]> _onHeadAddressChange;
+        Func<byte[], Task> _onHeadAddressChange;
 
         public byte[] XORAddress => _head.XORAddress;
 
-        public DataTree(IMd head, Action<byte[]> onHeadAddressChange)
+        public DataTree(IMd head, Func<byte[], Task> onHeadAddressChange)
         {
             _head = head;
             _onHeadAddressChange = onHeadAddressChange;
         }
 
-        public Result<Pointer> Add(string key, Value value)
+        public async Task<Result<Pointer>> AddAsync(string key, Value value)
         {
             if (_head.IsFull)
             {
                 // create new head, add pointer to current head in to it.
                 // the level > 0 indicates its role as pointer holder
-                var newHead = MdAccess.Create(_head.Level + 1);
+                var newHead = await MdAccess.CreateAsync(_head.Level + 1).ConfigureAwait(false);
                 var pointer = new Pointer
                 {
                     XORAddress = _head.XORAddress,
                     ValueType = typeof(Pointer).Name
                 };
-                newHead.Add(pointer);
+                await newHead.AddAsync(pointer).ConfigureAwait(false);
                 _head = newHead;
-                _onHeadAddressChange(newHead.XORAddress);
+                await _onHeadAddressChange(newHead.XORAddress).ConfigureAwait(false);
             }
 
-            return _head.Add(key, value);
+            return await _head.AddAsync(key, value).ConfigureAwait(false);
         }
 
-        public IEnumerable<Value> GetAllValues()
+        public Task<IEnumerable<Value>> GetAllValuesAsync()
         {
-            return _head.GetValues();
+            return _head.GetAllValuesAsync();
         }
 
-        public IEnumerable<(Pointer, Value)> GetAllPointerValues()
+        public Task<IEnumerable<(Pointer, Value)>> GetAllPointerValuesAsync()
         {
-            return _head.GetAllPointerValues();
+            return _head.GetAllPointerValuesAsync();
         }
     }
 }

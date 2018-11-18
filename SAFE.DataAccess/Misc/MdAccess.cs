@@ -1,28 +1,29 @@
 ﻿using System;
+using System.Threading.Tasks;
 
 namespace SAFE.DataAccess
 {
     public class MdAccess
     {
-        static Func<byte[], IMd> _locator;
-        static Func<int, IMd> _creator;
+        static Func<byte[], Task<IMd>> _locator;
+        static Func<int, Task<IMd>> _creator;
 
-        public static void SetLocator(Func<byte[], IMd> locator)
+        public static void SetLocator(Func<byte[], Task<IMd>> locator)
         {
             _locator = locator;
         }
 
-        public static void SetCreator(Func<int, IMd> creator)
+        public static void SetCreator(Func<int, Task<IMd>> creator)
         {
             _creator = creator;
         }
 
-        public static IMd Locate(byte[] xorAddress)
+        public static Task<IMd> LocateAsync(byte[] xorAddress)
         {
             return _locator(xorAddress);
         }
 
-        public static IMd Create(int level)
+        public static Task<IMd> CreateAsync(int level)
         {
             return _creator(level);
         }

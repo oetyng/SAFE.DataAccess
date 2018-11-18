@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace SAFE.DataAccess
 {
@@ -12,30 +13,30 @@ namespace SAFE.DataAccess
             _dataTree = dataTree;
         }
 
-        public void Add(string type, byte[] address)
+        public async Task AddAsync(string type, byte[] address)
         {
             var value = new Value
             {
                 Payload = address.Json(),
                 ValueType = typeof(byte[]).GetType().Name
             };
-            _dataTree.Add(type, value);
+            await _dataTree.AddAsync(type, value).ConfigureAwait(false);
         }
 
-        public Result<Pointer> Update(string type, byte[] address)
+        public async Task<Result<Pointer>> UpdateAsync(string type, byte[] address)
         {
-            var (pointer, value) = _dataTree.GetAllPointerValues()
+            var (pointer, value) = (await _dataTree.GetAllPointerValuesAsync().ConfigureAwait(false))
                 .Single(c => c.Item1.MdKey == type);
-            var md = MdAccess.Locate(pointer.XORAddress);
+            var md = await MdAccess.LocateAsync(pointer.XORAddress).ConfigureAwait(false);
             value.Payload = address.Json();
-            return md.Set(type, value);
+            return await md.SetAsync(type, value).ConfigureAwait(false);
         }
 
-        public IEnumerable<(string, byte[])> GetAll()
+        public async Task<IEnumerable<(string, byte[])>> GetAllAsync()
         {
-            var some = _dataTree.GetAllPointerValues()
+            var typeInfo = (await _dataTree.GetAllPointerValuesAsync().ConfigureAwait(false))
                 .Select(c => (c.Item1.MdKey, c.Item2.Payload.Parse<byte[]>()));
-            return some;
+            return typeInfo;
         }
     }
 }

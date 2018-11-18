@@ -1,6 +1,8 @@
 ﻿using SAFE.DataAccess.Factories;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace SAFE.DataAccess
 {
@@ -12,14 +14,17 @@ namespace SAFE.DataAccess
             : base(info, typeStore, new InactiveIndexer())
         { }
 
-        public static Indexer Create(string dbid)
+        public static async Task<Indexer> CreateAsync(string dbid)
         {
             var xor = System.Text.Encoding.UTF8.GetBytes($"{dbid}_indexer");
-            var md = MdAccess.Locate(xor);
-            var typeStoreInfo = TypeStoreInfoFactory.GetOrAddTypeStore(md, dbid);
+            var md = await MdAccess.LocateAsync(xor).ConfigureAwait(false);
+            var typeStoreInfo = await TypeStoreInfoFactory
+                .GetOrAddTypeStoreAsync(md, dbid)
+                .ConfigureAwait(false);
             var indexer = new Indexer(md, typeStoreInfo);
 
-            var typeStores = typeStoreInfo.GetAll();
+            var typeStores = await typeStoreInfo.GetAllAsync()
+                .ConfigureAwait(false);
             indexer._dataTreeAddresses = typeStores
                 .ToDictionary(c => c.Item1, c => c.Item2);
 
@@ -35,26 +40,34 @@ namespace SAFE.DataAccess
             return _dataTreeAddresses.ContainsKey(indexKey);
         }
 
-        public void CreateIndex<T>(string[] propertyPath, IEnumerable<(Pointer, Value)> pointerValues)
+        public Task CreateIndexAsync<T>(string[] propertyPath, IEnumerable<(Pointer, Value)> pointerValues)
         {
-            _paths = pointerValues
-                .ToDictionary(data => 
-                    TryIndexWithPath(propertyPath, data.Item2.Payload.Parse(), data.Item1),
-                    c => propertyPath);
+            var dict = new ConcurrentDictionary<string, string[]>();
+            var tasks = pointerValues.Select(async data =>
+            {
+                var key = await TryIndexWithPath(
+                    propertyPath,
+                    data.Item2.Payload.Parse(),
+                    data.Item1).ConfigureAwait(false);
+                dict[key] = propertyPath;
+            });
+            return Task.WhenAll(tasks);
         }
 
-        public void TryIndex(object topLevelObject, Pointer valuePointer)
+        public Task TryIndexAsync(object topLevelObject, Pointer valuePointer)
         {
-            foreach (var path in _paths.Values)
-                TryIndexWithPath(path, topLevelObject, valuePointer);
+            var tasks = _paths.Values.Select(path =>
+                TryIndexWithPath(path, topLevelObject, valuePointer));
+
+            return Task.WhenAll(tasks);
         }
 
-        public void Index(string indexKey, Pointer valuePointer)
+        public async Task IndexAsync(string indexKey, Pointer valuePointer)
         {
             if (!_dataTreeAddresses.ContainsKey(indexKey))
-                AddStore(indexKey);
+                await AddStoreAsync(indexKey).ConfigureAwait(false);
             if (!_dataTreeCache.ContainsKey(indexKey))
-                LoadStore(indexKey);
+                await LoadStoreAsync(indexKey).ConfigureAwait(false);
 
             var value = new Value
             {
@@ -62,7 +75,9 @@ namespace SAFE.DataAccess
                 ValueType = valuePointer.GetType().Name
             };
             var store = _dataTreeCache[indexKey];
-            var pointer = _dataTreeCache[indexKey].Add(valuePointer.MdKey, value);
+            var pointer = await _dataTreeCache[indexKey]
+                .AddAsync(valuePointer.MdKey, value)
+                .ConfigureAwait(false);
 
             if (!pointer.HasValue)
                 throw new System.Exception(pointer.ErrorMsg);
@@ -70,17 +85,21 @@ namespace SAFE.DataAccess
 
         // Scan. When db is acting as index db, this is 
         // what we want to do; i.e. fetch all that there is for the key.
-        public (IEnumerable<T> data, IEnumerable<string> errors) GetAllValues<T>(string indexKey)
+        public async Task<(IEnumerable<T> data, IEnumerable<string> errors)> GetAllValuesAsync<T>(string indexKey)
         {
             if (!_dataTreeCache.ContainsKey(indexKey))
-                LoadStore(indexKey);
+                await LoadStoreAsync(indexKey).ConfigureAwait(false);
 
-            var pointers = _dataTreeCache[indexKey]
-                .GetAllValues() // in an IndexDb, leaf values are stored Pointers,
+            var pointers = (await _dataTreeCache[indexKey]
+                .GetAllValuesAsync().ConfigureAwait(false)) // in an IndexDb, leaf values are stored Pointers,
                 .Select(c => c.Payload.Parse<Pointer>()); // as opposed to in ordinary Database, where leaf values are of type Value
 
-            var results = pointers
-                .Select(c => MdAccess.Locate(c.XORAddress).GetValue(c.MdKey));
+            var results = await Task.WhenAll(pointers
+                .Select(async c =>
+                {
+                    var md = await MdAccess.LocateAsync(c.XORAddress).ConfigureAwait(false);
+                    return await md.GetValueAsync(c.MdKey).ConfigureAwait(false);
+                }));
 
             var data = results.Where(c => c.HasValue)
                 .Select(c => c.Value)
@@ -93,17 +112,22 @@ namespace SAFE.DataAccess
 
         // Scan. When db is acting as index db, this is 
         // what we want to do; i.e. fetch all that there is for the key.
-        public (IEnumerable<(Pointer, Value)> data, IEnumerable<string> errors) GetAllPointersWithValues(string indexKey)
+        public async Task<(IEnumerable<(Pointer, Value)> data, IEnumerable<string> errors)> GetAllPointersWithValuesAsync(string indexKey)
         {
             if (!_dataTreeCache.ContainsKey(indexKey))
-                LoadStore(indexKey);
+                await LoadStoreAsync(indexKey).ConfigureAwait(false);
 
-            var pointers = _dataTreeCache[indexKey]
-                .GetAllValues()
+            var pointers = (await _dataTreeCache[indexKey]
+                .GetAllValuesAsync().ConfigureAwait(false))
                 .Select(c => c.Payload.Parse<Pointer>());
 
-            var results = pointers
-                .Select(c => MdAccess.Locate(c.XORAddress).GetPointerAndValue(c.MdKey));
+
+            var results = await Task.WhenAll(pointers
+                .Select(async c =>
+                {
+                    var md = await MdAccess.LocateAsync(c.XORAddress).ConfigureAwait(false);
+                    return await md.GetPointerAndValueAsync(c.MdKey).ConfigureAwait(false);
+                }));
 
             var data = results.Where(c => c.HasValue)
                 .Select(c => c.Value);
@@ -113,7 +137,7 @@ namespace SAFE.DataAccess
             return (data, errors);
         }
 
-        string TryIndexWithPath(string[] propertyPath, object topLevelObject, Pointer valuePointer)
+        async Task<string> TryIndexWithPath(string[] propertyPath, object topLevelObject, Pointer valuePointer)
         {
             object currentObj = topLevelObject;
             foreach (var prop in propertyPath)
@@ -126,36 +150,41 @@ namespace SAFE.DataAccess
             string path = string.Join('.', propertyPath);
             var key = currentObj.ToString();
             var indexKey = $"{type}/{path}/{key}";
-            Index(indexKey, valuePointer);
+            await IndexAsync(indexKey, valuePointer).ConfigureAwait(false);
             return indexKey;
         }
     }
 
     class InactiveIndexer : IIndexer
     {
-        public void CreateIndex<T>(string[] propertyPath, IEnumerable<(Pointer, Value)> pointerValues)
+        public Task CreateIndexAsync<T>(string[] propertyPath, IEnumerable<(Pointer, Value)> pointerValues)
         {
             // No op
+            return Task.FromResult(0);
         }
 
-        public (IEnumerable<T>, IEnumerable<string>) GetAllValues<T>(string indexKey)
-        {
-            return (new List<T>(), new List<string>());
-        }
-
-        public (IEnumerable<(Pointer, Value)> data, IEnumerable<string> errors) GetAllPointersWithValues(string indexKey)
-        {
-            return (new List<(Pointer, Value)>(), new List<string>());
-        }
-
-        public void Index(string indexKey, Pointer valuePointer)
+        public Task TryIndexAsync(object topLevelObject, Pointer valuePointer)
         {
             // No op
+            return Task.FromResult(0);
         }
 
-        public void TryIndex(object topLevelObject, Pointer valuePointer)
+        public Task IndexAsync(string indexKey, Pointer valuePointer)
         {
             // No op
+            return Task.FromResult(0);
+        }
+
+        public Task<(IEnumerable<T> data, IEnumerable<string> errors)> GetAllValuesAsync<T>(string indexKey)
+        {
+            // No op
+            return Task.FromResult(((IEnumerable<T>)new List<T>(), (IEnumerable<string>)new List<string>()));
+        }
+
+        public Task<(IEnumerable<(Pointer, Value)> data, IEnumerable<string> errors)> GetAllPointersWithValuesAsync(string indexKey)
+        {
+            // No op
+            return Task.FromResult(((IEnumerable<(Pointer, Value)>)new List<(Pointer, Value)>(), (IEnumerable<string>)new List<string>()));
         }
     }
 }

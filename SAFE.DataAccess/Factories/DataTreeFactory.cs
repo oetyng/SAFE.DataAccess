@@ -1,12 +1,13 @@
 ﻿using System;
+using System.Threading.Tasks;
 
 namespace SAFE.DataAccess.Factories
 {
     public class DataTreeFactory
     {
-        public static DataTree Create(Action<byte[]> onHeadAddressChange)
+        public static async Task<DataTree> CreateAsync(Func<byte[], Task> onHeadAddressChange)
         {
-            var head = Md.Create(level: 0);
+            var head = await MdAccess.CreateAsync(level: 0);
             var dataTree = new DataTree(head, onHeadAddressChange);
             return dataTree;
         }
