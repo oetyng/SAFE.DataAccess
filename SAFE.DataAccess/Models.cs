@@ -10,9 +10,9 @@ namespace SAFE.DataAccess
 
     public class Pointer
     {
-        public byte[] XORAddress { get; set; }
-        public string MdKey { get; set; }
-        public string ValueType { get; set; }
+        public byte[] XORAddress { get; set; } // The address of the Md this points at.
+        public string MdKey { get; set; } // The key under which the value is stored in that Md.
+        public string ValueType { get; set; } // The type of the value stored.
     }
 
     public class Value

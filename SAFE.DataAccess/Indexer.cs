@@ -4,15 +4,6 @@ using System.Linq;
 
 namespace SAFE.DataAccess
 {
-    public interface IIndexer
-    {
-        void CreateIndex<T>(string[] propertyPath, IEnumerable<(Pointer, Value)> pointerValues);
-        void TryIndex(object topLevelObject, Pointer valuePointer);
-        void Index(string indexKey, Pointer valuePointer);
-        (IEnumerable<T> data, IEnumerable<string> errors) GetAllValues<T>(string indexKey);
-        (IEnumerable<(Pointer, Value)> data, IEnumerable<string> errors) GetAllPointersWithValues(string indexKey);
-    }
-
     public class Indexer : Database, IIndexer
     {
         Dictionary<string, string[]> _paths = new Dictionary<string, string[]>();
@@ -46,7 +37,7 @@ namespace SAFE.DataAccess
 
         public void CreateIndex<T>(string[] propertyPath, IEnumerable<(Pointer, Value)> pointerValues)
         {
-            var _paths = pointerValues
+            _paths = pointerValues
                 .ToDictionary(data => 
                     TryIndexWithPath(propertyPath, data.Item2.Payload.Parse(), data.Item1),
                     c => propertyPath);

@@ -14,7 +14,7 @@ namespace SAFE.DataAccess.UnitTests
         }
 
         [TestMethod]
-        public void getoradd_returns_database()
+        public void DatabaseTests_getoradd_returns_database()
         {
             // Arrange
             var dbId = "theDb";
@@ -30,7 +30,7 @@ namespace SAFE.DataAccess.UnitTests
         }
 
         [TestMethod]
-        public void add_returns_pointer()
+        public void DatabaseTests_add_returns_pointer()
         {
             // Arrange
             var dbId = "theDb";
@@ -49,7 +49,7 @@ namespace SAFE.DataAccess.UnitTests
         }
 
         [TestMethod]
-        public void database_returns_stored_value()
+        public void DatabaseTests_returns_stored_value()
         {
             // Arrange
             var dbId = "theDb";
@@ -70,7 +70,7 @@ namespace SAFE.DataAccess.UnitTests
         }
 
         [TestMethod]
-        public void database_adds_more_than_md_capacity()
+        public void DatabaseTests_adds_more_than_md_capacity()
         {
             // Arrange
             var dbId = "theDb";

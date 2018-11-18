@@ -4,6 +4,9 @@ using System.Linq;
 
 namespace SAFE.DataAccess
 {
+    // This is the only in-memory mock in the project.
+    // To connect to SAFENetwork (mock/local/alpha-2), implement the IMd interface
+    // with connections via Maidsafe's SafeApp library.
     public class Md : IMd
     {
         static Dictionary<string, Md> _allMds = new Dictionary<string, Md>();
