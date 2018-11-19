@@ -133,7 +133,6 @@ namespace SAFE.DataAccess
                         return Result.OK(_valueFields[key]);
                     else
                         return new KeyNotFound<Value>($"Key: {key}");
-                    
                 default:
                     return new ArgumentOutOfRange<Value>(nameof(Type));
             }

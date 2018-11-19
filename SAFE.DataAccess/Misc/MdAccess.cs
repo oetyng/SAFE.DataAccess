@@ -27,5 +27,11 @@ namespace SAFE.DataAccess
         {
             return _creator(level);
         }
+
+        public static void UseInMemoryDb()
+        {
+            SetCreator(level => Task.FromResult(Md.Create(level)));
+            SetLocator(xor => Task.FromResult(Md.Locate(xor)));
+        }
     }
 }
