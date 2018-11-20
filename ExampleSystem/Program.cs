@@ -84,7 +84,6 @@ namespace ExampleSystem
             var (product, qty) = GetProductQuantity();
 
             var events = eShop.AddProductType(product, qty);
-            eShop.Apply(events);
             Save(events, eShop, db);
         }
 
@@ -94,7 +93,6 @@ namespace ExampleSystem
             var (product, qty) = GetProductQuantity();
 
             var events = eShop.RefillStock(product, qty);
-            eShop.Apply(events);
             Save(events, eShop, db);
         }
 
@@ -104,7 +102,6 @@ namespace ExampleSystem
             var (product, qty) = GetProductQuantity();
 
             var events = eShop.SellItems(product, qty);
-            eShop.Apply(events);
             Save(events, eShop, db);
         }
 
@@ -114,7 +111,6 @@ namespace ExampleSystem
             var (product, qty) = GetProductQuantity();
 
             var events = eShop.ReportStockLossOrDamage(product, qty);
-            eShop.Apply(events);
             Save(events, eShop, db);
         }
 
@@ -138,6 +134,7 @@ namespace ExampleSystem
 
         static void Save(List<Event> events, EShop eShop, Database db)
         {
+            eShop.Apply(events);
             events.ForEach(e =>
             {
                 var stored = StoredEvent.From(e, eShop.State.Name, eShop.State.Id);
@@ -190,7 +187,6 @@ namespace ExampleSystem
         {
             var eShop = new EShop();
             var events = eShop.InitShop("EShop");
-            eShop.Apply(events);
             Save(events, eShop, db);
             return eShop;
         }
