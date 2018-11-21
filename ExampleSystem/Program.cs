@@ -1,6 +1,8 @@
 ﻿using SAFE.DataAccess;
+using SAFE.DataAccess.Client;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace ExampleSystem
 {
@@ -10,10 +12,8 @@ namespace ExampleSystem
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine("This is your EShop!");
-            MdAccess.UseInMemoryDb();
 
-            var pwd = GetPwd();
-            var db = GetDatabase(pwd);
+            var db = GetDatabase();
             var eShop = AddEShop(db);
 
             Console.WriteLine("Choose an option:");
@@ -57,6 +57,14 @@ namespace ExampleSystem
             } while (input.Key != ConsoleKey.Escape);
         }
 
+        static EShop AddEShop(Database db)
+        {
+            var eShop = new EShop();
+            var events = eShop.InitShop("EShop");
+            Save(events, eShop, db);
+            return eShop;
+        }
+
         static void ShowCurrentState(EShop eShop)
         {
             Console.WriteLine(". Current state");
@@ -67,7 +75,7 @@ namespace ExampleSystem
         {
             Console.WriteLine(". Event history");
             var events = db.GetAllAsync<StoredEvent>().GetAwaiter().GetResult();
-            foreach (var e in events)
+            foreach (var e in events.OrderBy(c => c.SequenceNr))
                 Console.WriteLine(e);
         }
 
@@ -137,16 +145,19 @@ namespace ExampleSystem
             eShop.Apply(events);
             events.ForEach(e =>
             {
-                var stored = StoredEvent.From(e, eShop.State.Name, eShop.State.Id);
-                db.AddAsync(stored.Id.ToString(), stored).GetAwaiter().GetResult();
+                try
+                {
+                    var stored = StoredEvent.From(e, eShop.State.Name, eShop.State.Id);
+                    db.AddAsync(stored.Id.ToString(), stored).GetAwaiter().GetResult();
+                }
+                catch(Exception ex)
+                {
+                    Console.WriteLine(ex.Message + ex.StackTrace);
+                    Console.WriteLine("Press any key to terminate.");
+                    Console.ReadKey();
+                    Environment.Exit(-1);
+                }
             });
-        }
-
-        static Database GetDatabase(string pwd)
-        {
-            var indexer = Indexer.CreateAsync(pwd).GetAwaiter().GetResult();
-            var dbResult = Database.GetOrAddAsync(pwd, indexer).GetAwaiter().GetResult();
-            return dbResult.Value;
         }
 
         static string GetPwd()
@@ -183,12 +194,51 @@ namespace ExampleSystem
             return pass;
         }
 
-        static EShop AddEShop(Database db)
+        static Database GetDatabase()
         {
-            var eShop = new EShop();
-            var events = eShop.InitShop("EShop");
-            Save(events, eShop, db);
-            return eShop;
+            Console.WriteLine();
+            Console.WriteLine("Database options:");
+            Console.WriteLine("1. In memory");
+            Console.WriteLine("2. Mock network (SAFE Network)");
+            //Console.WriteLine("3. SAFE Network (Alpha-2)");
+            ConsoleKeyInfo input;
+
+            IClient client = default(IClient);
+
+            do
+            {
+                input = Console.ReadKey();
+                switch (input.Key)
+                {
+                    case ConsoleKey.D1:
+                        client = ClientFactory.GetInMemoryClient();
+                        break;
+                    case ConsoleKey.D2:
+                        client = ClientFactory.GetMockNetworkClient().GetAwaiter().GetResult();
+                        break;
+                    case ConsoleKey.Escape:
+                        Environment.Exit(-1);
+                        return null;
+                    default:
+                        Console.WriteLine("Press 1 or 2, or ESC to exit.");
+                        break;
+                }
+            } while (client == null);
+
+            Console.WriteLine();
+
+            var pwd = GetPwd();
+            var db = client.GetOrAddDataBaseAsync(pwd).GetAwaiter().GetResult();
+            if (db.HasValue)
+                return db.Value;
+            else
+            {
+                Console.WriteLine(db.ErrorMsg);
+                Console.WriteLine("Press any key to terminate.");
+                Console.ReadKey();
+                Environment.Exit(-1);
+                return null;
+            }
         }
     }
 }

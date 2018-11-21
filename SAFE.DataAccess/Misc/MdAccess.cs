@@ -5,10 +5,10 @@ namespace SAFE.DataAccess
 {
     public class MdAccess
     {
-        static Func<byte[], Task<IMd>> _locator;
+        static Func<MdLocation, Task<Result<IMd>>> _locator;
         static Func<int, Task<IMd>> _creator;
 
-        public static void SetLocator(Func<byte[], Task<IMd>> locator)
+        public static void SetLocator(Func<MdLocation, Task<Result<IMd>>> locator)
         {
             _locator = locator;
         }
@@ -18,9 +18,9 @@ namespace SAFE.DataAccess
             _creator = creator;
         }
 
-        public static Task<IMd> LocateAsync(byte[] xorAddress)
+        public static Task<Result<IMd>> LocateAsync(MdLocation location)
         {
-            return _locator(xorAddress);
+            return _locator(location);
         }
 
         public static Task<IMd> CreateAsync(int level)
@@ -31,7 +31,7 @@ namespace SAFE.DataAccess
         public static void UseInMemoryDb()
         {
             SetCreator(level => Task.FromResult(Md.Create(level)));
-            SetLocator(xor => Task.FromResult(Md.Locate(xor)));
+            SetLocator(location => Task.FromResult(Result.OK(Md.Locate(location))));
         }
     }
 }

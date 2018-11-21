@@ -13,19 +13,19 @@ namespace SAFE.DataAccess.Factories
             var typeStoreResult = await dbInfoMd.GetValueAsync(TYPE_STORE_HEAD_KEY).ConfigureAwait(false);
             if (!typeStoreResult.HasValue)
             {
-                typeStoreHead = await MdAccess.LocateAsync(Encoding.UTF8.GetBytes($"{TYPE_STORE_HEAD_KEY}_{dbId}"))
+                typeStoreHead = await MdAccess.CreateAsync(0)
                     .ConfigureAwait(false);
-                await dbInfoMd.AddAsync(TYPE_STORE_HEAD_KEY, new Value(typeStoreHead.XORAddress))
+                await dbInfoMd.AddAsync(TYPE_STORE_HEAD_KEY, new StoredValue(typeStoreHead.MdLocation))
                     .ConfigureAwait(false);
             }
             else
             {
-                var typeStoreHeadXOR = typeStoreResult.Value.Payload.Parse<byte[]>();
-                typeStoreHead = await MdAccess.LocateAsync(typeStoreHeadXOR)
-                    .ConfigureAwait(false);
+                var typeStoreHeadLocation = typeStoreResult.Value.Payload.Parse<MdLocation>();
+                typeStoreHead = (await MdAccess.LocateAsync(typeStoreHeadLocation)
+                    .ConfigureAwait(false)).Value;
             }
 
-            Task onHeadChange(byte[] newXOR) => dbInfoMd.SetAsync(TYPE_STORE_HEAD_KEY, new Value(newXOR));
+            Task onHeadChange(MdLocation newLocation) => dbInfoMd.SetAsync(TYPE_STORE_HEAD_KEY, new StoredValue(newLocation));
 
             var dataTree = new DataTree(typeStoreHead, onHeadChange);
 

@@ -16,14 +16,12 @@ namespace SAFE.DataAccess.Network
         protected MDataInfo _mdInfo;
         protected MdMetadata _metadata;
 
-        public const int MAX_COUNT = MdMetadata.Capacity;
-
         public MdType Type => _metadata.Type;
         public int Count => _metadata.Count;
         public int Level => _metadata.Level;
-        public bool IsFull => _metadata.Count > MdMetadata.Capacity;
-        public byte[] XORAddress => _metadata.XORAddress;
-        public TMeta GetMetaValue<TMeta>(string key) => _metadata.Get<TMeta>(key);
+        public bool IsFull => _metadata.Count >= MdMetadata.Capacity;
+        public int Capacity => MdMetadata.Capacity;
+        public MdLocation MdLocation => _metadata.MdLocation;
 
         static MdOps()
         {
@@ -36,38 +34,48 @@ namespace SAFE.DataAccess.Network
             _mdInfo = mdInfo;
         }
 
+        // level 0 gives new leaf 
         public Task Initialize(int level)
         {
             return GetOrAddMetadata(level);
         }
 
-        // 50 % converted
-        // level 0 gives new leaf 
-        public static async Task<IMd> CreateAsync(int level, Session session)
+        public static async Task<Result<IMd>> LocateAsync(MdLocation location, NetworkDataOps networkDataOp)
         {
-            //session.MDataInfoActions.
-            var newMd = new MdOps(default(MDataInfo), session);
-            await newMd.Initialize(level).ConfigureAwait(false);
-            return newMd;
+            var mdResult = await networkDataOp.LocatePublicMd(location.XORName, location.TypeTag);
+            if (!mdResult.HasValue)
+                return new KeyNotFound<IMd>($"Could not locate md: {location.TypeTag}, {location.XORName}");
+
+            var mdInfo = mdResult.Value;
+            var md = new MdOps(mdInfo, networkDataOp.Session);
+            await md.GetOrAddMetadata();
+            return Result.OK((IMd)md);
         }
 
-        // 50 % converted
-        public static async Task<IMd> LocateAsync(byte[] xorAddress, Session session)
+        public static async Task<IMd> CreateNewMdOpsAsync(int level, NetworkDataOps networkDataOps, ulong protocol)
         {
-            // try find on network
-            if (false)// if not found, create with level 0
-                await CreateAsync(0, session).ConfigureAwait(false);
-            //session.MDataInfoActions.
-            var newMd = new MdOps(default(MDataInfo), session);
-            await newMd.Initialize(level: 0).ConfigureAwait(false);
-            return newMd;
+            var session = networkDataOps.Session;
+
+            // Create Permissions
+            using (var permissionsHandle = await session.MDataPermissions.NewAsync())
+            {
+                using (var appSignPkH = await session.Crypto.AppPubSignKeyAsync())
+                {
+                    await session.MDataPermissions.InsertAsync(permissionsHandle, appSignPkH, networkDataOps.GetFullPermissions());
+                }
+
+                var mdInfo = await networkDataOps.CreateEmptyRandomPrivateMd(permissionsHandle, protocol);
+                var newMd = new MdOps(mdInfo, session);
+                await newMd.Initialize(level).ConfigureAwait(false);
+                return newMd;
+            }
         }
 
         public async Task<long> GetEntryVersionAsync(string key)
         {
             try
             {
-                var entry = await _session.MData.GetValueAsync(_mdInfo, key.ToUtfBytes()).ConfigureAwait(false);
+                var entry = await Session.MData.GetValueAsync(_mdInfo, key.ToUtfBytes()).ConfigureAwait(false);
                 return (long)entry.Item2;
             }
             catch
@@ -80,7 +88,7 @@ namespace SAFE.DataAccess.Network
         {
             try
             {
-                var keyEntries = await _session.MData.ListKeysAsync(_mdInfo).ConfigureAwait(false);
+                var keyEntries = await Session.MData.ListKeysAsync(_mdInfo).ConfigureAwait(false);
                 var keys = keyEntries.Select(c => c.Val);
                 var keyBytes = key.ToUtfBytes();
                 return keys.Any(c => c.SequenceEqual(keyBytes));
@@ -95,7 +103,7 @@ namespace SAFE.DataAccess.Network
         {
             try
             {
-                var keyEntries = await _session.MData.ListKeysAsync(_mdInfo).ConfigureAwait(false);
+                var keyEntries = await Session.MData.ListKeysAsync(_mdInfo).ConfigureAwait(false);
                 var keys = keyEntries.Select(c => c.Val.ToUtfString()).ToList();
                 return keys;
             }
@@ -105,37 +113,35 @@ namespace SAFE.DataAccess.Network
             }
         }
 
-        // Converted
-        public async Task<Result<Value>> GetValueAsync(string key)
+        public async Task<Result<StoredValue>> GetValueAsync(string key)
         {
             try
             {
                 switch (Type)
                 {
                     case MdType.Pointers:
-                        return new InvalidOperation<Value>($"There are no values in pointers. Method must be called on a ValuePointer (i.e. Md with Level = 0). Key {key}.");
+                        return new InvalidOperation<StoredValue>($"There are no values in pointers. Method must be called on a ValuePointer (i.e. Md with Level = 0). Key {key}.");
                     case MdType.Values:
-                        var mdRef = await _session.MData.GetValueAsync(_mdInfo, key.ToUtfBytes()).ConfigureAwait(false);
+                        var mdRef = await Session.MData.GetValueAsync(_mdInfo, key.ToUtfBytes()).ConfigureAwait(false);
                         if (mdRef.Item1.Count == 0) // beware of this, is an empty list always the same as a deleted value?
-                            return new ValueDeleted<Value>($"Key: {key}.");
+                            return new ValueDeleted<StoredValue>($"Key: {key}.");
 
                         var json = mdRef.Item1.ToUtfString();
-                        if (!json.TryParse(out Value item)) // beware of this, the type parsed must have proper property validations for this to work (Like [JsonRequired])
-                            return new DeserializationError<Value>();
+                        if (!json.TryParse(out StoredValue item)) // beware of this, the type parsed must have proper property validations for this to work (Like [JsonRequired])
+                            return new DeserializationError<StoredValue>();
                         return Result.OK(item);
                     default:
-                        return new ArgumentOutOfRange<Value>(nameof(Type));
+                        return new ArgumentOutOfRange<StoredValue>(nameof(Type));
                 }
             }
             catch (FfiException ex)
             {
                 if (ex.ErrorCode != -106)
                     throw;
-                return new KeyNotFound<Value>($"Key: {key}.");
+                return new KeyNotFound<StoredValue>($"Key: {key}.");
             }
         }
 
-        // Added for conversion
         async Task<Result<Pointer>> GetPointerAsync(string key)
         {
             try
@@ -143,7 +149,7 @@ namespace SAFE.DataAccess.Network
                 switch (Type)
                 {
                     case MdType.Pointers:
-                        var mdRef = await _session.MData.GetValueAsync(_mdInfo, key.ToUtfBytes()).ConfigureAwait(false);
+                        var mdRef = await Session.MData.GetValueAsync(_mdInfo, key.ToUtfBytes()).ConfigureAwait(false);
                         if (mdRef.Item1.Count == 0) // beware of this, is an empty list always the same as a deleted value?
                             return new ValueDeleted<Pointer>($"Key: {key}.");
 
@@ -166,41 +172,39 @@ namespace SAFE.DataAccess.Network
             }
         }
 
-        // Converted
-        public async Task<Result<(Pointer, Value)>> GetPointerAndValueAsync(string key)
+        public async Task<Result<(Pointer, StoredValue)>> GetPointerAndValueAsync(string key)
         {
             switch (Type)
             {
                 case MdType.Pointers:
-                    return new InvalidOperation<(Pointer, Value)>($"There are no values in pointers. Method must be called on a ValuePointer (i.e. Md with Level = 0). Key {key}.");
+                    return new InvalidOperation<(Pointer, StoredValue)>($"There are no values in pointers. Method must be called on a ValuePointer (i.e. Md with Level = 0). Key {key}.");
                 case MdType.Values:
                     if (await ContainsKeyAsync(key))
                     {
                         var valueResult = await GetValueAsync(key).ConfigureAwait(false);
                         if (!valueResult.HasValue)
-                            return Result.Fail<(Pointer, Value)>(valueResult.ErrorCode.Value, valueResult.ErrorMsg);
+                            return Result.Fail<(Pointer, StoredValue)>(valueResult.ErrorCode.Value, valueResult.ErrorMsg);
                         var value = valueResult.Value;
                         return Result.OK((new Pointer
                         {
-                            XORAddress = this.XORAddress,
+                            MdLocation = this.MdLocation,
                             MdKey = key,
                             ValueType = value.ValueType
                         }, value));
                     }
                     else
-                        return new KeyNotFound<(Pointer, Value)>($"Key: {key}");
+                        return new KeyNotFound<(Pointer, StoredValue)>($"Key: {key}");
                 default:
-                    return new ArgumentOutOfRange<(Pointer, Value)>(nameof(Type));
+                    return new ArgumentOutOfRange<(Pointer, StoredValue)>(nameof(Type));
             }
         }
 
-        // 50 % converted
-        public async Task<IEnumerable<Value>> GetAllValuesAsync()
+        public async Task<IEnumerable<StoredValue>> GetAllValuesAsync()
         {
             try
             {
-                var bag = new ConcurrentBag<Value>();
-                var values = await _session.MData.ListValuesAsync(_mdInfo).ConfigureAwait(false);
+                var valueBag = new ConcurrentBag<StoredValue>();
+                var values = await Session.MData.ListValuesAsync(_mdInfo).ConfigureAwait(false);
 
                 switch (Type)
                 {
@@ -208,22 +212,30 @@ namespace SAFE.DataAccess.Network
                         var pointerBag = new ConcurrentBag<Pointer>();
                         Parallel.ForEach(values, val =>
                         {
-                            if (val.Content.ToUtfString().TryParse(out Pointer result))
+                            var couldParse = val.Content.ToUtfString()
+                                .TryParse(out Pointer result);
+                            if (couldParse && result.ValueType != typeof(MdMetadata).Name)
                                 pointerBag.Add(result);
                         });
                         // from pointerBag get regs to mds
-                        // pointerBag
-                        //    .Select(c => Locate(c.XORAddress))
-                        //    .SelectMany(c => c.GetAllValues());
-                        // add to bag
-                        return bag;
+                        var pointerTasks = pointerBag
+                            .Select(c => LocateAsync(c.MdLocation, new NetworkDataOps(Session)));
+                        var pointerValues = (await Task.WhenAll(pointerTasks)
+                            .ConfigureAwait(false));
+                        var valueTasks = pointerValues
+                           .Select(c => c.Value.GetAllValuesAsync());
+                        var fetchedValues = (await Task.WhenAll(valueTasks))
+                            .SelectMany(c => c);
+                        Parallel.ForEach(fetchedValues, val => valueBag.Add(val));
+                        return valueBag;
                     case MdType.Values:
                         Parallel.ForEach(values, val =>
                         {
-                            if (val.Content.ToUtfString().TryParse(out Value result))
-                                bag.Add(result);
+                            var json = val.Content.ToUtfString();
+                            if (json.TryParse(out StoredValue result))
+                                valueBag.Add(result);
                         });
-                        return bag;
+                        return valueBag.Where(c => c.ValueType != typeof(MdMetadata).Name);
                     default:
                         throw new ArgumentOutOfRangeException(nameof(Type));
                 }
@@ -236,16 +248,15 @@ namespace SAFE.DataAccess.Network
             }
         }
 
-        // Converted
-        public async Task<IEnumerable<(Pointer, Value)>> GetAllPointerValuesAsync()
+        public async Task<IEnumerable<(Pointer, StoredValue)>> GetAllPointerValuesAsync()
         {
             switch (Type)
             {
                 case MdType.Pointers:
                     var pointerTasks = (await GetAllPointersAsync().ConfigureAwait(false))
-                        .Select(c => LocateAsync(c.XORAddress, _session));
+                        .Select(c => LocateAsync(c.MdLocation, new NetworkDataOps(Session)));
                     var pointerValuesTasks = (await Task.WhenAll(pointerTasks).ConfigureAwait(false))
-                        .Select(c => c.GetAllPointerValuesAsync());
+                        .Select(c => c.Value.GetAllPointerValuesAsync());
                     return (await Task.WhenAll(pointerValuesTasks).ConfigureAwait(false))
                         .SelectMany(c => c);
                 case MdType.Values:
@@ -258,20 +269,21 @@ namespace SAFE.DataAccess.Network
                     //        ValueType = c.ValueType
                     //    }, c));
 
-                    var keys = await GetKeysAsync().ConfigureAwait(false); ;
-                    var pairs = new ConcurrentDictionary<string, Value>();
+                    var keys = await GetKeysAsync().ConfigureAwait(false);
+                    var pairs = new ConcurrentDictionary<string, StoredValue>();
                     var valueTasks = keys.Select(async c =>
                     {
-                        var val = await GetValueAsync(c).ConfigureAwait(false); ;
+                        var val = await GetValueAsync(c).ConfigureAwait(false);
                         if (val.HasValue)
                             pairs[c] = val.Value;
                     });
-                    await Task.WhenAll(valueTasks).ConfigureAwait(false); ;
+                    await Task.WhenAll(valueTasks).ConfigureAwait(false);
+
                     return pairs
                         .Where(c => c.Value.ValueType != typeof(MdMetadata).Name)
                         .Select(c => (new Pointer
                         {
-                            XORAddress = this.XORAddress,
+                            MdLocation = this.MdLocation,
                             MdKey = c.Key,
                             ValueType = c.Value.ValueType
                         }, c.Value));
@@ -286,7 +298,7 @@ namespace SAFE.DataAccess.Network
             try
             {
                 var pointerBag = new ConcurrentBag<Pointer>();
-                var values = await _session.MData.ListValuesAsync(_mdInfo).ConfigureAwait(false);
+                var values = await Session.MData.ListValuesAsync(_mdInfo).ConfigureAwait(false);
 
                 switch (Type)
                 {
@@ -311,11 +323,10 @@ namespace SAFE.DataAccess.Network
             }
         }
 
-        // Converted
         // Adds if not exists
         // It will return the direct pointer to the stored value
         // which makes it readily available for indexing at higher levels.
-        public async Task<Result<Pointer>> AddAsync(string key, Value value)
+        public async Task<Result<Pointer>> AddAsync(string key, StoredValue value)
         {
             if (IsFull)
                 return new MdOutOfEntriesError<Pointer>($"Filled: {Count}/{MdMetadata.Capacity}");
@@ -332,7 +343,11 @@ namespace SAFE.DataAccess.Network
                         if (!pointer.HasValue)
                             return pointer;
 
-                        var target = await LocateAsync(pointer.Value.XORAddress, _session).ConfigureAwait(false);
+                        var targetResult = await LocateAsync(pointer.Value.MdLocation, new NetworkDataOps(Session))
+                            .ConfigureAwait(false);
+                        if (!targetResult.HasValue)
+                            return Result.Fail<Pointer>(targetResult.ErrorCode.Value, targetResult.ErrorMsg);
+                        var target = targetResult.Value;
                         if (target.IsFull)
                             return await ExpandLevelAsync(key, value).ConfigureAwait(false);
 
@@ -345,7 +360,7 @@ namespace SAFE.DataAccess.Network
 
                         return Result.OK(new Pointer
                         {
-                            XORAddress = this.XORAddress,
+                            MdLocation = this.MdLocation,
                             MdKey = key,
                             ValueType = value.ValueType
                         });
@@ -361,10 +376,9 @@ namespace SAFE.DataAccess.Network
             }
         }
 
-        // Added for conversion
         async Task AddObjectAsync(string key, object value)
         {
-            using (var entryActionsH = await _session.MDataEntryActions.NewAsync().ConfigureAwait(false))
+            using (var entryActionsH = await Session.MDataEntryActions.NewAsync().ConfigureAwait(false))
             {
                 // insert value
                 var insertObj = new Dictionary<string, object>
@@ -377,7 +391,7 @@ namespace SAFE.DataAccess.Network
                 var meta = GetCountBumpedClone(); // clone and bump
                 var updateObj = new Dictionary<string, (object, ulong)>
                 {
-                    { METADATA_KEY, (meta, meta.MetadataVersion) }
+                    { METADATA_KEY, (new StoredValue(meta), meta.MetadataVersion) }
                 };
                 await UpdateEntriesAsync(entryActionsH, updateObj).ConfigureAwait(false);
 
@@ -387,9 +401,8 @@ namespace SAFE.DataAccess.Network
             }
         }
 
-        // Converted
         // Adds or overwrites
-        public async Task<Result<Pointer>> SetAsync(string key, Value value, long expectedVersion = -1)
+        public async Task<Result<Pointer>> SetAsync(string key, StoredValue value, long expectedVersion = -1)
         {
             var keyBytes = key.ToUtfBytes();
             ulong version = 0;
@@ -401,7 +414,7 @@ namespace SAFE.DataAccess.Network
                     case MdType.Pointers:
                         return new InvalidOperation<Pointer>($"Cannot set values directly on pointers. Key {key}, value type {value.ValueType}");
                     case MdType.Values:
-                        var mdRef = await _session.MData.GetValueAsync(_mdInfo, keyBytes).ConfigureAwait(false);
+                        var mdRef = await Session.MData.GetValueAsync(_mdInfo, keyBytes).ConfigureAwait(false);
                         version = mdRef.Item2;
                         if (0 > expectedVersion || version != (ulong)expectedVersion)
                             return new VersionMismatch<Pointer>($"Expected {expectedVersion}, but found {version}.");
@@ -419,14 +432,14 @@ namespace SAFE.DataAccess.Network
 
             try
             {
-                using (var entryActionsH = await _session.MDataEntryActions.NewAsync().ConfigureAwait(false))
+                using (var entryActionsH = await Session.MDataEntryActions.NewAsync().ConfigureAwait(false))
                 {
                     // update value and update metadata
                     var meta = GetCountBumpedClone(); // clone and bump
                     var updateObj = new Dictionary<string, (object, ulong)>
                     {
                         { key, (value, version + 1) },
-                        { METADATA_KEY, (meta, meta.MetadataVersion) }
+                        { METADATA_KEY, (new StoredValue(meta), meta.MetadataVersion) }
                     };
                     await UpdateEntriesAsync(entryActionsH, updateObj).ConfigureAwait(false);
                     await CommitEntryMutationAsync(_mdInfo, entryActionsH).ConfigureAwait(false);
@@ -434,7 +447,7 @@ namespace SAFE.DataAccess.Network
 
                     return Result.OK(new Pointer
                     {
-                        XORAddress = this.XORAddress,
+                        MdLocation = this.MdLocation,
                         MdKey = key,
                         ValueType = value.ValueType
                     });
@@ -446,7 +459,6 @@ namespace SAFE.DataAccess.Network
             }
         }
 
-        // Converted
         // Removes if exists, else throws
         public async Task<Result<Pointer>> DeleteAsync(string key)
         {
@@ -461,9 +473,9 @@ namespace SAFE.DataAccess.Network
                             return new KeyNotFound<Pointer>($"Key: {key}");
                         
                         var keyBytes = key.ToUtfBytes();
-                        var mdRef = await _session.MData.GetValueAsync(_mdInfo, keyBytes).ConfigureAwait(false);
+                        var mdRef = await Session.MData.GetValueAsync(_mdInfo, keyBytes).ConfigureAwait(false);
 
-                        using (var entryActionsH = await _session.MDataEntryActions.NewAsync().ConfigureAwait(false))
+                        using (var entryActionsH = await Session.MDataEntryActions.NewAsync().ConfigureAwait(false))
                         {
                             // delete
                             var deleteObj = new Dictionary<string, ulong>
@@ -476,7 +488,7 @@ namespace SAFE.DataAccess.Network
                             var meta = GetCountDecreasedClone(); // clone and bump
                             var updateObj = new Dictionary<string, (object, ulong)>
                             {
-                                { METADATA_KEY, (meta, meta.MetadataVersion) }
+                                { METADATA_KEY, (new StoredValue(meta), meta.MetadataVersion) }
                             };
                             await UpdateEntriesAsync(entryActionsH, updateObj).ConfigureAwait(false);
 
@@ -486,12 +498,12 @@ namespace SAFE.DataAccess.Network
                         }
 
                         var json = mdRef.Item1.ToUtfString();
-                        if (!json.TryParse(out Value value)) // beware of this, the type parsed must have proper property validations for this to work (Like [JsonRequired])
+                        if (!json.TryParse(out StoredValue value)) // beware of this, the type parsed must have proper property validations for this to work (Like [JsonRequired])
                             return new DeserializationError<Pointer>();
 
                         return Result.OK(new Pointer
                         {
-                            XORAddress = this.XORAddress,
+                            MdLocation = this.MdLocation,
                             MdKey = key,
                             ValueType = value.ValueType
                         });
@@ -508,7 +520,6 @@ namespace SAFE.DataAccess.Network
             }
         }
 
-        // Converted
         public async Task<Result<Pointer>> AddAsync(Pointer pointer)
         {
             if (IsFull)
@@ -516,44 +527,33 @@ namespace SAFE.DataAccess.Network
             if (Type == MdType.Values)
                 return new InvalidOperation<Pointer>("Pointers can only be added in Pointer type Mds (i.e. Level > 0).");
             var index = (Count + 1).ToString();
+            pointer.MdKey = index;
             await AddObjectAsync(index, pointer);
-            //_pointerFields[index] = pointer;
-            //_metadata.IncrementCount();
             return Result.OK(pointer);
         }
 
-
         // Creates if it doesn't exist
-        async Task GetOrAddMetadata(int level)
+        async Task GetOrAddMetadata(int level = 0)
         {
             if (_metadata != null)
                 return;
-            var keys = await _session.MData.ListKeysAsync(_mdInfo).ConfigureAwait(false);
+            var keys = await Session.MData.ListKeysAsync(_mdInfo).ConfigureAwait(false);
             if (keys.Any(c => c.Val.SequenceEqual(METADATA_KEY_BYTES)))
             {
-                var metaMD = await _session.MData.GetValueAsync(_mdInfo, METADATA_KEY_BYTES).ConfigureAwait(false);
-                _metadata = metaMD.Item1.ToUtfString().Parse<MdMetadata>();
+                var metaMD = await Session.MData.GetValueAsync(_mdInfo, METADATA_KEY_BYTES).ConfigureAwait(false);
+                _metadata = metaMD.Item1.ToUtfString().Parse<StoredValue>().Parse<MdMetadata>();
                 return;
             }
 
-            //var meta = Activator.CreateInstance<T>(new object[] { level });
-            var meta = new MdMetadata(level)
-            {
-                XORAddress = _mdInfo.Name
-            };
+            var meta = new MdMetadata(level, new MdLocation(_mdInfo.Name, _mdInfo.TypeTag));
 
-            // 
-            var value = new Value
-            {
-                Payload = meta.Json(),
-                ValueType = typeof(MdMetadata).Name
-            };
+            var value = new StoredValue(meta);
 
             var insertObj = new Dictionary<string, object>
             {
-                { METADATA_KEY, meta }
+                { METADATA_KEY, value }
             };
-            using (var entryActionsH = await _session.MDataEntryActions.NewAsync().ConfigureAwait(false))
+            using (var entryActionsH = await Session.MDataEntryActions.NewAsync().ConfigureAwait(false))
             {
                 await InsertEntriesAsync(entryActionsH, insertObj).ConfigureAwait(false);
                 await CommitEntryMutationAsync(_mdInfo, entryActionsH).ConfigureAwait(false);
@@ -561,39 +561,17 @@ namespace SAFE.DataAccess.Network
             _metadata = meta;
         }
 
-        public async Task SetMetadata(string key, object value)
-        {
-            var meta = _metadata.Clone<MdMetadata>();
-            meta.Set(key, value);
-
-            try
-            {
-                await Update(meta).ConfigureAwait(false);
-            }
-            catch (FfiException ex) // optimistic concurrency
-            {
-                if (ex.ErrorCode != -107)
-                    throw;
-
-                var metaMD = await _session.MData.GetValueAsync(_mdInfo, METADATA_KEY_BYTES).ConfigureAwait(false);
-                _metadata = metaMD.Item1.ToUtfString().Parse<MdMetadata>();
-
-                meta = _metadata.Clone<MdMetadata>();
-                meta.Set(key, value);
-
-                await Update(meta).ConfigureAwait(false);
-            }
-        }
-
         async Task Update(MdMetadata meta)
         {
-            meta.MetadataVersion++; // increase version
+            meta.IncrementVersion(); // increase version
+
+            var value = new StoredValue(meta);
 
             var insertObj = new Dictionary<string, (object, ulong)>
             {
-                { METADATA_KEY, (meta, meta.MetadataVersion) }
+                { METADATA_KEY, (value, meta.MetadataVersion) }
             };
-            using (var entryActionsH = await _session.MDataEntryActions.NewAsync().ConfigureAwait(false))
+            using (var entryActionsH = await Session.MDataEntryActions.NewAsync().ConfigureAwait(false))
             {
                 await UpdateEntriesAsync(entryActionsH, insertObj).ConfigureAwait(false);
                 await CommitEntryMutationAsync(_mdInfo, entryActionsH).ConfigureAwait(false);
@@ -601,31 +579,10 @@ namespace SAFE.DataAccess.Network
             _metadata = meta;
         }
 
-        public async Task<Result<object>> TryGetMetadata(string key, bool fromCache = false)
-        {
-            if (fromCache)
-                return Result.OK(_metadata.Get(key));
-
-            try
-            {
-                var metaMD = await _session.MData.GetValueAsync(_mdInfo, METADATA_KEY_BYTES).ConfigureAwait(false);
-                _metadata = metaMD.Item1.ToUtfString().Parse<MdMetadata>();
-                if (!_metadata.ContainsKey(key))
-                    return new KeyNotFound<object>();
-                return Result.OK(_metadata.Get(key));
-            }
-            catch (FfiException ex)
-            {
-                if (ex.ErrorCode != -103)
-                    throw;
-                return new KeyNotFound<object>();
-            }
-        }
-
         // so we don't get left with an updated cache after failed commit
         protected MdMetadata GetCountBumpedClone()
         {
-            var meta = _metadata.Clone<MdMetadata>();
+            var meta = _metadata.Clone();
             meta.IncrementCount();
             meta.IncrementVersion(); // increase version count
             return meta;
@@ -634,19 +591,18 @@ namespace SAFE.DataAccess.Network
         // so we don't get left with an updated cache after failed commit
         protected MdMetadata GetCountDecreasedClone()
         {
-            var meta = _metadata.Clone<MdMetadata>();
+            var meta = _metadata.Clone();
             meta.DecrementCount();
             meta.DecrementVersion(); // increase version count
             return meta;
         }
 
-        // Added for conversion
-        async Task<Result<Pointer>> ExpandLevelAsync(string key, Value value)
+        async Task<Result<Pointer>> ExpandLevelAsync(string key, StoredValue value)
         {
             if (Level == 0)
                 return new ArgumentOutOfRange<Pointer>(nameof(Level));
 
-            var md = await CreateAsync(Level - 1, _session).ConfigureAwait(false);
+            var md = await CreateNewMdOps(Level - 1).ConfigureAwait(false);
             var leafPointer = await md.AddAsync(key, value).ConfigureAwait(false);
             if (!leafPointer.HasValue)
                 return leafPointer;
@@ -656,18 +612,27 @@ namespace SAFE.DataAccess.Network
                 case MdType.Pointers: // i.e. we have still not reached the end of the tree
                     await AddAsync(new Pointer
                     {
-                        XORAddress = md.XORAddress,
+                        MdLocation = md.MdLocation,
                         ValueType = typeof(Pointer).Name
                     }).ConfigureAwait(false);
                     break;
                 case MdType.Values:  // i.e. we are now right above leaf level
-                    await AddAsync(leafPointer.Value).ConfigureAwait(false);
+                    await AddAsync(new Pointer
+                    {
+                        MdLocation = leafPointer.Value.MdLocation,
+                        ValueType = typeof(Pointer).Name
+                    }).ConfigureAwait(false);
                     break;
                 default:
                     return new ArgumentOutOfRange<Pointer>(nameof(md.Type));
             }
 
             return leafPointer;
+        }
+
+        Task<IMd> CreateNewMdOps(int level)
+        {
+            return CreateNewMdOpsAsync(level, new NetworkDataOps(Session), DataProtocol.DEFAULT_PROTOCOL);
         }
     }
 }

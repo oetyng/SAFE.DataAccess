@@ -7,17 +7,17 @@ namespace SAFE.DataAccess
     public class DataTree
     {
         IMd _head;
-        Func<byte[], Task> _onHeadAddressChange;
+        Func<MdLocation, Task> _onHeadAddressChange;
 
-        public byte[] XORAddress => _head.XORAddress;
+        public MdLocation MdLocation => _head.MdLocation;
 
-        public DataTree(IMd head, Func<byte[], Task> onHeadAddressChange)
+        public DataTree(IMd head, Func<MdLocation, Task> onHeadAddressChange)
         {
             _head = head;
             _onHeadAddressChange = onHeadAddressChange;
         }
 
-        public async Task<Result<Pointer>> AddAsync(string key, Value value)
+        public async Task<Result<Pointer>> AddAsync(string key, StoredValue value)
         {
             if (_head.IsFull)
             {
@@ -26,23 +26,23 @@ namespace SAFE.DataAccess
                 var newHead = await MdAccess.CreateAsync(_head.Level + 1).ConfigureAwait(false);
                 var pointer = new Pointer
                 {
-                    XORAddress = _head.XORAddress,
+                    MdLocation = _head.MdLocation,
                     ValueType = typeof(Pointer).Name
                 };
                 await newHead.AddAsync(pointer).ConfigureAwait(false);
                 _head = newHead;
-                await _onHeadAddressChange(newHead.XORAddress).ConfigureAwait(false);
+                await _onHeadAddressChange(newHead.MdLocation).ConfigureAwait(false);
             }
 
             return await _head.AddAsync(key, value).ConfigureAwait(false);
         }
 
-        public Task<IEnumerable<Value>> GetAllValuesAsync()
+        public Task<IEnumerable<StoredValue>> GetAllValuesAsync()
         {
             return _head.GetAllValuesAsync();
         }
 
-        public Task<IEnumerable<(Pointer, Value)>> GetAllPointerValuesAsync()
+        public Task<IEnumerable<(Pointer, StoredValue)>> GetAllPointerValuesAsync()
         {
             return _head.GetAllPointerValuesAsync();
         }

@@ -13,7 +13,7 @@ namespace ExampleSystem
         public override string ToString()
         {
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"{Name}, number of events: {Version}");
+            sb.AppendLine($"{Name}, number of events: {Version + 1}");
             sb.AppendLine($"Product quantities:");
             foreach (var pair in ProductTypeQuantity)
                 sb.AppendLine($"{pair.Key} : {pair.Value}");

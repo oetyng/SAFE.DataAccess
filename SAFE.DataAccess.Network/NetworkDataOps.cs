@@ -9,77 +9,77 @@ namespace SAFE.DataAccess.Network
 {
     public class NetworkDataOps
     {
-        protected Session _session;
+        public readonly Session Session;
 
         public NetworkDataOps(Session session)
         {
-            _session = session;
+            Session = session;
         }
 
-        protected async Task<MDataInfo> CreateEmptyMd(ulong typeTag)
+        public async Task<MDataInfo> CreateEmptyMd(ulong typeTag)
         {
-            using (var permissionH = await _session.MDataPermissions.NewAsync())
+            using (var permissionH = await Session.MDataPermissions.NewAsync())
             {
-                using (var appSignPkH = await _session.Crypto.AppPubSignKeyAsync())
-                    await _session.MDataPermissions.InsertAsync(permissionH, appSignPkH, GetFullPermissions());
+                using (var appSignPkH = await Session.Crypto.AppPubSignKeyAsync())
+                    await Session.MDataPermissions.InsertAsync(permissionH, appSignPkH, GetFullPermissions());
 
-                var info = await _session.MDataInfoActions.RandomPrivateAsync(typeTag);
-                await _session.MData.PutAsync(info, permissionH, NativeHandle.Zero); // <----------------------------------------------    Commit ------------------------
+                var info = await Session.MDataInfoActions.RandomPrivateAsync(typeTag);
+                await Session.MData.PutAsync(info, permissionH, NativeHandle.Zero); // <----------------------------------------------    Commit ------------------------
                 return info;
             }
         }
 
-        protected async Task<List<byte>> CreateEmptyMdSerialized(ulong typeTag)
+        public async Task<List<byte>> CreateEmptyMdSerialized(ulong typeTag)
         {
-            using (var permissionH = await _session.MDataPermissions.NewAsync())
+            using (var permissionH = await Session.MDataPermissions.NewAsync())
             {
-                using (var appSignPkH = await _session.Crypto.AppPubSignKeyAsync())
-                    await _session.MDataPermissions.InsertAsync(permissionH, appSignPkH, GetFullPermissions());
+                using (var appSignPkH = await Session.Crypto.AppPubSignKeyAsync())
+                    await Session.MDataPermissions.InsertAsync(permissionH, appSignPkH, GetFullPermissions());
 
-                var info = await _session.MDataInfoActions.RandomPrivateAsync(typeTag);
-                await _session.MData.PutAsync(info, permissionH, NativeHandle.Zero); // <----------------------------------------------    Commit ------------------------
-                return await _session.MDataInfoActions.SerialiseAsync(info);
+                var info = await Session.MDataInfoActions.RandomPrivateAsync(typeTag);
+                await Session.MData.PutAsync(info, permissionH, NativeHandle.Zero); // <----------------------------------------------    Commit ------------------------
+                return await Session.MDataInfoActions.SerialiseAsync(info);
             }
         }
 
         // Populates the entries.
-        protected async Task InsertDataEntries(NativeHandle mdEntriesH, Dictionary<string, List<byte>> data)
+        public async Task InsertDataEntries(NativeHandle mdEntriesH, Dictionary<string, List<byte>> data)
         {
             foreach (var pair in data)
-                await _session.MDataEntries.InsertAsync(mdEntriesH, pair.Key.ToUtfBytes(), pair.Value);
+                await Session.MDataEntries.InsertAsync(mdEntriesH, pair.Key.ToUtfBytes(), pair.Value);
         }
 
         #region MDEntries tx
 
         // Populate the md entry actions handle.
-        protected async Task InsertEntriesAsync(NativeHandle entryActionsH, Dictionary<string, object> data)
+        public async Task InsertEntriesAsync(NativeHandle entryActionsH, Dictionary<string, object> data)
         {
             foreach (var pair in data)
-                await _session.MDataEntryActions.InsertAsync(entryActionsH, pair.Key.ToUtfBytes(), pair.Value.Json().ToUtfBytes());
+                await Session.MDataEntryActions.InsertAsync(entryActionsH, pair.Key.ToUtfBytes(), pair.Value.Json().ToUtfBytes());
         }
 
         // Populate the md entry actions handle.
-        protected async Task UpdateEntriesAsync(NativeHandle entryActionsH, Dictionary<string, (object, ulong)> data)
+        public async Task UpdateEntriesAsync(NativeHandle entryActionsH, Dictionary<string, (object, ulong)> data)
         {
             foreach (var pair in data)
             {
                 var val = pair.Value.Item1;
                 var version = pair.Value.Item2;
-                await _session.MDataEntryActions.UpdateAsync(entryActionsH, pair.Key.ToUtfBytes(), val.Json().ToUtfBytes(), version);
+                await Session.MDataEntryActions.UpdateAsync(entryActionsH, pair.Key.ToUtfBytes(), val.Json().ToUtfBytes(), version);
             }
         }
 
         // Populate the md entry actions handle.
-        protected async Task DeleteEntriesAsync(NativeHandle entryActionsH, Dictionary<string, ulong> data)
+        public async Task DeleteEntriesAsync(NativeHandle entryActionsH, Dictionary<string, ulong> data)
         {
             foreach (var pair in data)
-                await _session.MDataEntryActions.DeleteAsync(entryActionsH, pair.Key.ToUtfBytes(), pair.Value);
+                await Session.MDataEntryActions.DeleteAsync(entryActionsH, pair.Key.ToUtfBytes(), pair.Value);
         }
 
         // Commit the operations in the md entry actions handle.
-        protected async Task CommitEntryMutationAsync(MDataInfo mDataInfo, NativeHandle entryActionsH)
+        public async Task CommitEntryMutationAsync(MDataInfo mDataInfo, NativeHandle entryActionsH)
         {
-            await _session.MData.MutateEntriesAsync(mDataInfo, entryActionsH); // <----------------------------------------------    Commit ------------------------
+            await Session.MData.MutateEntriesAsync(mDataInfo, entryActionsH); // <----------------------------------------------    Commit ------------------------
         }
 
         #endregion MDEntries tx
@@ -91,11 +91,11 @@ namespace SAFE.DataAccess.Network
         /// <param name="permissionsHandle"></param>
         /// <param name="dataEntries"></param>
         /// <returns>A serialised MdInfo</returns>
-        protected async Task<List<byte>> CreateRandomPrivateMd(NativeHandle permissionsHandle, NativeHandle dataEntries)
+        public async Task<MDataInfo> CreateRandomPrivateMd(NativeHandle permissionsHandle, NativeHandle dataEntries, ulong protocol)
         {
-            var info = await _session.MDataInfoActions.RandomPrivateAsync(15001); // todo: fix typetag
-            await _session.MData.PutAsync(info, permissionsHandle, dataEntries); // <----------------------------------------------    Commit ------------------------
-            return await _session.MDataInfoActions.SerialiseAsync(info);
+            var mdInfo = await Session.MDataInfoActions.RandomPrivateAsync(protocol);
+            await Session.MData.PutAsync(mdInfo, permissionsHandle, dataEntries); // <----------------------------------------------    Commit ------------------------
+            return mdInfo;
         }
 
         /// <summary>
@@ -103,12 +103,28 @@ namespace SAFE.DataAccess.Network
         /// </summary>
         /// <param name="permissionsHandle"></param>
         /// <returns>SerialisedMdInfo</returns>
-        protected async Task<List<byte>> CreateEmptyRandomPrivateMd(NativeHandle permissionsHandle)
+        public async Task<MDataInfo> CreateEmptyRandomPrivateMd(NativeHandle permissionsHandle, ulong protocol)
         {
-            return await CreateRandomPrivateMd(permissionsHandle, NativeHandle.Zero);
+            return await CreateRandomPrivateMd(permissionsHandle, NativeHandle.Zero, protocol);
         }
 
-        protected PermissionSet GetFullPermissions()
+        public async Task<Result<MDataInfo>> LocatePublicMd(byte[] xor, ulong protocol)
+        {
+            var md = new MDataInfo { Name = xor, TypeTag = protocol };
+
+            try
+            {
+                await Session.MData.ListKeysAsync(md);
+            }
+            catch(System.Exception ex)
+            {
+                return new KeyNotFound<MDataInfo>($"Could not find Md with tag type {protocol} and address {xor}");
+            }
+
+            return Result.OK(md);
+        }
+
+        public PermissionSet GetFullPermissions()
         {
             return new PermissionSet
             {
@@ -121,35 +137,35 @@ namespace SAFE.DataAccess.Network
         }
 
         // Returns data map address.
-        protected async Task<byte[]> StoreImmutableData(byte[] payload)
+        public async Task<byte[]> StoreImmutableData(byte[] payload)
         {
-            using (var cipherOptHandle = await _session.CipherOpt.NewPlaintextAsync())
+            using (var cipherOptHandle = await Session.CipherOpt.NewPlaintextAsync())
             {
-                using (var seWriterHandle = await _session.IData.NewSelfEncryptorAsync())
+                using (var seWriterHandle = await Session.IData.NewSelfEncryptorAsync())
                 {
-                    await _session.IData.WriteToSelfEncryptorAsync(seWriterHandle, payload.ToList());
-                    var dataMapAddress = await _session.IData.CloseSelfEncryptorAsync(seWriterHandle, cipherOptHandle);
+                    await Session.IData.WriteToSelfEncryptorAsync(seWriterHandle, payload.ToList());
+                    var dataMapAddress = await Session.IData.CloseSelfEncryptorAsync(seWriterHandle, cipherOptHandle);
                     return dataMapAddress;
                 }
             }
         }
 
-        protected static async Task<byte[]> GetMdXorName(string plainTextId)
+        public static async Task<byte[]> GetMdXorName(string plainTextId)
         {
             return (await Crypto.Sha3HashAsync(plainTextId.ToUtfBytes())).ToArray();
         }
 
 
-        protected async Task<(byte[], byte[])> GenerateRandomKeyPair()
+        public async Task<(byte[], byte[])> GenerateRandomKeyPair()
         {
-            var randomKeyPairTuple = await _session.Crypto.EncGenerateKeyPairAsync();
+            var randomKeyPairTuple = await Session.Crypto.EncGenerateKeyPairAsync();
             byte[] encPublicKey, encSecretKey;
             using (var inboxEncPkH = randomKeyPairTuple.Item1)
             {
                 using (var inboxEncSkH = randomKeyPairTuple.Item2)
                 {
-                    encPublicKey = await _session.Crypto.EncPubKeyGetAsync(inboxEncPkH);
-                    encSecretKey = await _session.Crypto.EncSecretKeyGetAsync(inboxEncSkH);
+                    encPublicKey = await Session.Crypto.EncPubKeyGetAsync(inboxEncPkH);
+                    encSecretKey = await Session.Crypto.EncSecretKeyGetAsync(inboxEncSkH);
                 }
             }
             return (encPublicKey, encSecretKey);

@@ -9,8 +9,7 @@ namespace SAFE.DataAccess.UnitTests
         [TestInitialize]
         public void TestInitialize()
         {
-            MdAccess.SetCreator(level => Task.FromResult(Md.Create(level)));
-            MdAccess.SetLocator(xor => Task.FromResult(Md.Locate(xor)));
+            
         }
     }
 }

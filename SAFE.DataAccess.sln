@@ -3,15 +3,19 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27428.2002
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SAFE.DataAccess", "SAFE.DataAccess\SAFE.DataAccess.csproj", "{0E07F6EE-173F-4509-BB14-B647AED70F48}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SAFE.DataAccess", "SAFE.DataAccess\SAFE.DataAccess.csproj", "{0E07F6EE-173F-4509-BB14-B647AED70F48}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SAFE.DataAccess.UnitTests", "SAFE.DataAccess.UnitTests\SAFE.DataAccess.UnitTests.csproj", "{28CA7D36-8F99-4582-9A1B-48C440CE9D89}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SAFE.DataAccess.UnitTests", "SAFE.DataAccess.UnitTests\SAFE.DataAccess.UnitTests.csproj", "{28CA7D36-8F99-4582-9A1B-48C440CE9D89}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SAFE.DataAccess.Network", "SAFE.DataAccess.Network\SAFE.DataAccess.Network.csproj", "{9BEAE9EF-AE23-4044-9EB9-E88BB3E8B5D4}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SAFE.DataAccess.Network", "SAFE.DataAccess.Network\SAFE.DataAccess.Network.csproj", "{9BEAE9EF-AE23-4044-9EB9-E88BB3E8B5D4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SAFE.DataAccess.Common", "SAFE.DataAccess.Common\SAFE.DataAccess.Common.csproj", "{993C5964-6AE9-4BBB-B37E-F2117B5B899D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SAFE.DataAccess.Common", "SAFE.DataAccess.Common\SAFE.DataAccess.Common.csproj", "{993C5964-6AE9-4BBB-B37E-F2117B5B899D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExampleSystem", "ExampleSystem\ExampleSystem.csproj", "{F94F0B44-E4BA-4580-96BC-FF67AF284FBF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ExampleSystem", "ExampleSystem\ExampleSystem.csproj", "{F94F0B44-E4BA-4580-96BC-FF67AF284FBF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Misc", "Misc", "{28DE24B3-8774-4C4A-92D9-A4A1972C395B}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SAFE.DataAccess.Client", "SAFE.DataAccess.Client\SAFE.DataAccess.Client.csproj", "{D7D661A3-2D45-48FE-8916-010C4A6588DB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,9 +43,16 @@ Global
 		{F94F0B44-E4BA-4580-96BC-FF67AF284FBF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F94F0B44-E4BA-4580-96BC-FF67AF284FBF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F94F0B44-E4BA-4580-96BC-FF67AF284FBF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D7D661A3-2D45-48FE-8916-010C4A6588DB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7D661A3-2D45-48FE-8916-010C4A6588DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7D661A3-2D45-48FE-8916-010C4A6588DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7D661A3-2D45-48FE-8916-010C4A6588DB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{F94F0B44-E4BA-4580-96BC-FF67AF284FBF} = {28DE24B3-8774-4C4A-92D9-A4A1972C395B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {F22CF478-7E8B-471B-B343-00A4DD44B56A}

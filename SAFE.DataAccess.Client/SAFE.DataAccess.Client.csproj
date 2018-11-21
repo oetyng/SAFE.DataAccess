@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SAFE.DataAccess.Common\SAFE.DataAccess.Common.csproj" />
+    <ProjectReference Include="..\SAFE.DataAccess.Network\SAFE.DataAccess.Network.csproj" />
+    <ProjectReference Include="..\SAFE.DataAccess\SAFE.DataAccess.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="SafeApp.MockAuthBindings">
+      <HintPath>..\..\..\..\..\..\.nuget\packages\maidsafe.mockauth\SafeApp.MockAuthBindings.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

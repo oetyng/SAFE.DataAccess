@@ -13,7 +13,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\SAFE.DataAccess.Client\SAFE.DataAccess.Client.csproj" />
     <ProjectReference Include="..\SAFE.DataAccess\SAFE.DataAccess.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="safe_app.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

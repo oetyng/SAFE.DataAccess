@@ -1,4 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SAFE.DataAccess.Client;
+using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -7,22 +10,25 @@ namespace SAFE.DataAccess.UnitTests
     [TestClass]
     public class DatabaseTests
     {
+        IClient _client;
+
+        //[TestInitialize]
+        //public void TestInitialize()
+        //{
+        //    _client = ClientFactory.GetInMemoryClient();
+        //}
+
         [TestInitialize]
-        public void TestInitialize()
+        public async Task TestInitialize()
         {
-            MdAccess.SetCreator(level => Task.FromResult(Md.Create(level)));
-            MdAccess.SetLocator(xor => Task.FromResult(Md.Locate(xor)));
+            _client = await ClientFactory.GetMockNetworkClient();
         }
 
         [TestMethod]
         public async Task DatabaseTests_getoradd_returns_database()
         {
-            // Arrange
-            var dbId = "theDb";
-            var indexer = await Indexer.CreateAsync(dbId).ConfigureAwait(false);
-
             // Act
-            var dbResult = await Database.GetOrAddAsync(dbId, indexer).ConfigureAwait(false);
+            var dbResult = await GetDatabase("theDb");
 
             // Assert
             Assert.IsNotNull(dbResult);
@@ -34,9 +40,7 @@ namespace SAFE.DataAccess.UnitTests
         public async Task DatabaseTests_add_returns_pointer()
         {
             // Arrange
-            var dbId = "theDb";
-            var indexer = await Indexer.CreateAsync(dbId).ConfigureAwait(false);
-            var dbResult = await Database.GetOrAddAsync(dbId, indexer).ConfigureAwait(false);
+            var dbResult = await GetDatabase("theDb");
             var theKey = "theKey";
             var theData = 42;
 
@@ -53,9 +57,7 @@ namespace SAFE.DataAccess.UnitTests
         public async Task DatabaseTests_returns_stored_value()
         {
             // Arrange
-            var dbId = "theDb";
-            var indexer = await Indexer.CreateAsync(dbId).ConfigureAwait(false);
-            var dbResult = await Database.GetOrAddAsync(dbId, indexer).ConfigureAwait(false);
+            var dbResult = await GetDatabase("theDb");
             var theKey = "theKey";
             var theData = 42;
             var addResult = await dbResult.Value.AddAsync(theKey, theData).ConfigureAwait(false);
@@ -74,29 +76,40 @@ namespace SAFE.DataAccess.UnitTests
         public async Task DatabaseTests_adds_more_than_md_capacity()
         {
             // Arrange
-            var dbId = "theDb";
-            var indexer = await Indexer.CreateAsync(dbId).ConfigureAwait(false);
-            var dbResult = await Database.GetOrAddAsync(dbId, indexer).ConfigureAwait(false);
-            var addCount = 5.3 * MdMetadata.Capacity;
+            var dbResult = await GetDatabase("theDb");
+            var addCount = Math.Round(1.3 * MdMetadata.Capacity);
+            var sw = new Stopwatch();
 
             for (int i = 0; i < addCount; i++)
             {
+                
                 var theKey = $"theKey_{i}";
                 var theData = i;
 
                 // Act
+                sw.Restart();
                 var addResult = await dbResult.Value.AddAsync(theKey, theData).ConfigureAwait(false);
+                sw.Stop();
+
+                if (!addResult.HasValue)
+                { }
 
                 // Assert 1
                 Assert.IsNotNull(addResult);
                 Assert.IsInstanceOfType(addResult, typeof(Result<Pointer>));
                 Assert.IsTrue(addResult.HasValue);
+                Debug.WriteLine($"{i}: {sw.ElapsedMilliseconds}");
             }
 
             // Assert 2
             var data = (await dbResult.Value.GetAllAsync<int>().ConfigureAwait(false)).ToList();
             Assert.IsNotNull(data);
             Assert.AreEqual(addCount, data.Count);
+        }
+
+        Task<Result<Database>> GetDatabase(string dbName)
+        {
+            return _client.GetOrAddDataBaseAsync(dbName);
         }
     }
 }

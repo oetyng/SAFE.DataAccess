@@ -9,15 +9,15 @@ namespace SAFE.DataAccess
         bool IsFull { get; }
         int Level { get; }
         MdType Type { get; }
-        byte[] XORAddress { get; }
+        MdLocation MdLocation { get; }
 
         Task<Result<Pointer>> AddAsync(Pointer pointer);
-        Task<Result<Pointer>> AddAsync(string key, Value value);
+        Task<Result<Pointer>> AddAsync(string key, StoredValue value);
         Task<Result<Pointer>> DeleteAsync(string key);
-        Task<IEnumerable<(Pointer, Value)>> GetAllPointerValuesAsync();
-        Task<Result<(Pointer, Value)>> GetPointerAndValueAsync(string key);
-        Task<Result<Value>> GetValueAsync(string key);
-        Task<IEnumerable<Value>> GetAllValuesAsync();
-        Task<Result<Pointer>> SetAsync(string key, Value value, long expectedVersion = -1);
+        Task<IEnumerable<(Pointer, StoredValue)>> GetAllPointerValuesAsync();
+        Task<Result<(Pointer, StoredValue)>> GetPointerAndValueAsync(string key);
+        Task<Result<StoredValue>> GetValueAsync(string key);
+        Task<IEnumerable<StoredValue>> GetAllValuesAsync();
+        Task<Result<Pointer>> SetAsync(string key, StoredValue value, long expectedVersion = -1);
     }
 }

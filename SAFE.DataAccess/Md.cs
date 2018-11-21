@@ -12,7 +12,7 @@ namespace SAFE.DataAccess
     {
         static Dictionary<string, IMd> _allMds = new Dictionary<string, IMd>();
 
-        Dictionary<string, Value> _valueFields = new Dictionary<string, Value>();
+        Dictionary<string, StoredValue> _valueFields = new Dictionary<string, StoredValue>();
         Dictionary<int, Pointer> _pointerFields = new Dictionary<int, Pointer>();
         MdMetadata _metadata;
 
@@ -28,21 +28,15 @@ namespace SAFE.DataAccess
 
         public int Level => Metadata.Level;
         public int Count => Metadata.Count;
-        public byte[] XORAddress => Metadata.XORAddress;
+        public MdLocation MdLocation => Metadata.MdLocation;
         public bool IsFull => Metadata.Count > MdMetadata.Capacity;
         public MdType Type => Metadata.Type;
 
         private Md(int level)
         {
-            _valueFields["metadata"] = new Value
-            {
-                Payload = new MdMetadata(level).Json(),
-                ValueType = typeof(MdMetadata).Name
-            };
-
-            var xor = new byte[32];
-            _rand.NextBytes(xor);
-            Metadata.Set(MdMetadata.XOR_ADDRESS_KEY, xor);
+            var xor = new MdLocation(new byte[32], DataProtocol.DEFAULT_PROTOCOL);
+            _rand.NextBytes(xor.XORName);
+            _valueFields["metadata"] = new StoredValue(new MdMetadata(level, xor));
         }
 
         Random _rand = new Random();
@@ -50,43 +44,43 @@ namespace SAFE.DataAccess
         public static IMd Create(int level)
         {
             var newMd = new Md(level);
-            _allMds[newMd.XORAddress.Json()] = newMd;
+            _allMds[newMd.MdLocation.Json()] = newMd;
             return newMd;
         }
 
-        public static IMd Locate(byte[] xorAddress)
+        public static IMd Locate(MdLocation location)
         {
             // try find on network
-            var key = xorAddress.Json();
+            var key = location.Json();
             if (!_allMds.ContainsKey(key)) // if not found, create with level 0
             {
                 var md = Md.Create(level: 0);
-                _allMds[md.XORAddress.Json()] = md;
+                _allMds[md.MdLocation.Json()] = md;
                 return md;
             }
 
             return _allMds[key];
         }
 
-        public Task<IEnumerable<(Pointer, Value)>> GetAllPointerValuesAsync()
+        public Task<IEnumerable<(Pointer, StoredValue)>> GetAllPointerValuesAsync()
         {
             return Task.FromResult(GetAllPointerValues());
         }
 
-        IEnumerable<(Pointer, Value)> GetAllPointerValues()
+        IEnumerable<(Pointer, StoredValue)> GetAllPointerValues()
         {
             switch (Type)
             {
                 case MdType.Pointers:
                     return _pointerFields.Values
-                        .Select(c => Locate(c.XORAddress))
+                        .Select(c => Locate(c.MdLocation))
                         .SelectMany(c => (c as Md).GetAllPointerValues());
                 case MdType.Values:
                     return _valueFields
                         .Where(c => c.Value.ValueType != typeof(MdMetadata).Name)
                         .Select(c => (new Pointer
                         {
-                            XORAddress = this.XORAddress,
+                            MdLocation = this.MdLocation,
                             MdKey = c.Key,
                             ValueType = c.Value.ValueType
                         }, c.Value));
@@ -95,18 +89,18 @@ namespace SAFE.DataAccess
             }
         }
 
-        public Task<IEnumerable<Value>> GetAllValuesAsync()
+        public Task<IEnumerable<StoredValue>> GetAllValuesAsync()
         {
             return Task.FromResult(GetAllValues());
         }
 
-        IEnumerable<Value> GetAllValues()
+        IEnumerable<StoredValue> GetAllValues()
         {
             switch (Type)
             {
                 case MdType.Pointers:
                     return _pointerFields.Values
-                        .Select(c => Locate(c.XORAddress))
+                        .Select(c => Locate(c.MdLocation))
                         .SelectMany(c => (c as Md).GetAllValues());
                 case MdType.Values:
                     return _valueFields
@@ -117,53 +111,53 @@ namespace SAFE.DataAccess
             }
         }
 
-        public Task<Result<Value>> GetValueAsync(string key)
+        public Task<Result<StoredValue>> GetValueAsync(string key)
         {
             return Task.FromResult(GetValue(key));
         }
 
-        Result<Value> GetValue(string key)
+        Result<StoredValue> GetValue(string key)
         {
             switch(Type)
             {
                 case MdType.Pointers:
-                    return new InvalidOperation<Value>($"There are no values in pointers. Method must be called on a ValuePointer (i.e. Md with Level = 0). Key {key}.");
+                    return new InvalidOperation<StoredValue>($"There are no values in pointers. Method must be called on a ValuePointer (i.e. Md with Level = 0). Key {key}.");
                 case MdType.Values:
                     if (_valueFields.ContainsKey(key))
                         return Result.OK(_valueFields[key]);
                     else
-                        return new KeyNotFound<Value>($"Key: {key}");
+                        return new KeyNotFound<StoredValue>($"Key: {key}");
                 default:
-                    return new ArgumentOutOfRange<Value>(nameof(Type));
+                    return new ArgumentOutOfRange<StoredValue>(nameof(Type));
             }
         }
 
-        public Task<Result<(Pointer, Value)>> GetPointerAndValueAsync(string key)
+        public Task<Result<(Pointer, StoredValue)>> GetPointerAndValueAsync(string key)
         {
             return Task.FromResult(GetPointerAndValue(key));
         }
 
-        Result<(Pointer, Value)> GetPointerAndValue(string key)
+        Result<(Pointer, StoredValue)> GetPointerAndValue(string key)
         {
             switch (Type)
             {
                 case MdType.Pointers:
-                    return new InvalidOperation<(Pointer, Value)>($"There are no values in pointers. Method must be called on a ValuePointer (i.e. Md with Level = 0). Key {key}.");
+                    return new InvalidOperation<(Pointer, StoredValue)>($"There are no values in pointers. Method must be called on a ValuePointer (i.e. Md with Level = 0). Key {key}.");
                 case MdType.Values:
                     if (_valueFields.ContainsKey(key))
                     {
                         var value = _valueFields[key];
                         return Result.OK((new Pointer
                         {
-                            XORAddress = this.XORAddress,
+                            MdLocation = this.MdLocation,
                             MdKey = key,
                             ValueType = value.ValueType
                         }, value));
                     }
                     else
-                        return new KeyNotFound<(Pointer, Value)>($"Key: {key}");
+                        return new KeyNotFound<(Pointer, StoredValue)>($"Key: {key}");
                 default:
-                    return new ArgumentOutOfRange<(Pointer, Value)>(nameof(Type));
+                    return new ArgumentOutOfRange<(Pointer, StoredValue)>(nameof(Type));
             }
         }
 
@@ -183,12 +177,12 @@ namespace SAFE.DataAccess
             return Result.OK(pointer);
         }
 
-        public Task<Result<Pointer>> SetAsync(string key, Value value, long expectedVersion = -1)
+        public Task<Result<Pointer>> SetAsync(string key, StoredValue value, long expectedVersion = -1)
         {
             return Task.FromResult(Set(key, value));
         }
 
-        Result<Pointer> Set(string key, Value value)
+        Result<Pointer> Set(string key, StoredValue value)
         {
             switch (Type)
             {
@@ -198,7 +192,7 @@ namespace SAFE.DataAccess
                     _valueFields[key] = value;
                     return Result.OK(new Pointer
                     {
-                        XORAddress = this.XORAddress,
+                        MdLocation = this.MdLocation,
                         MdKey = key,
                         ValueType = value.ValueType
                     });
@@ -225,7 +219,7 @@ namespace SAFE.DataAccess
                     _valueFields.Remove(key);
                     return Result.OK(new Pointer
                     {
-                        XORAddress = this.XORAddress,
+                        MdLocation = this.MdLocation,
                         MdKey = key,
                         ValueType = value.ValueType
                     });
@@ -234,14 +228,14 @@ namespace SAFE.DataAccess
             }
         }
 
-        public Task<Result<Pointer>> AddAsync(string key, Value value)
+        public Task<Result<Pointer>> AddAsync(string key, StoredValue value)
         {
             return Task.FromResult(Add(key, value));
         }
 
         // It will return the direct pointer to the stored value
         // which makes it readily available for indexing at higher levels.
-        Result<Pointer> Add(string key, Value value)
+        Result<Pointer> Add(string key, StoredValue value)
         {
             if (IsFull)
                 return new MdOutOfEntriesError<Pointer>($"Filled: {Metadata.Count}/{MdMetadata.Capacity}");
@@ -251,7 +245,7 @@ namespace SAFE.DataAccess
                     if (Count == 0)
                         return ExpandLevel(key, value);
 
-                    var target = Locate(_pointerFields[Count].XORAddress);
+                    var target = Locate(_pointerFields[Count].MdLocation);
                     if (target.IsFull) 
                         return ExpandLevel(key, value);
 
@@ -264,7 +258,7 @@ namespace SAFE.DataAccess
                     _metadata.IncrementCount();
                     return Result.OK(new Pointer
                     {
-                        XORAddress = this.XORAddress,
+                        MdLocation = this.MdLocation,
                         MdKey = key,
                         ValueType = value.ValueType
                     });
@@ -273,7 +267,7 @@ namespace SAFE.DataAccess
             }
         }
 
-        Result<Pointer> ExpandLevel(string key, Value value)
+        Result<Pointer> ExpandLevel(string key, StoredValue value)
         {
             if (Level == 0)
                 return new ArgumentOutOfRange<Pointer>(nameof(Level));
@@ -288,7 +282,7 @@ namespace SAFE.DataAccess
                 case MdType.Pointers: // i.e. we have still not reached the end of the tree
                     Add(new Pointer
                     {
-                        XORAddress = md.XORAddress,
+                        MdLocation = md.MdLocation,
                         ValueType = typeof(Pointer).Name
                     });
                     break;
