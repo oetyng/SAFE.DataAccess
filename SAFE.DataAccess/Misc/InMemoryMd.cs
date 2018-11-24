@@ -8,7 +8,7 @@ namespace SAFE.DataAccess
     // This is the only in-memory mock in the project.
     // To connect to SAFENetwork (mock/local/alpha-2), implement the IMd interface
     // with connections via Maidsafe's SafeApp library.
-    public class Md : IMd
+    public class InMemoryMd : IMd
     {
         static Dictionary<string, IMd> _allMds = new Dictionary<string, IMd>();
 
@@ -21,7 +21,7 @@ namespace SAFE.DataAccess
         public bool IsFull => Count > MdMetadata.Capacity;
         public MdType Type { get; set; }
 
-        private Md(int level)
+        private InMemoryMd(int level)
         {
             MdLocator = new MdLocator(new byte[32], DataProtocol.DEFAULT_PROTOCOL);
             _rand.NextBytes(MdLocator.XORName);
@@ -32,7 +32,7 @@ namespace SAFE.DataAccess
         // level 0 gives new leaf 
         public static IMd Create(int level)
         {
-            var newMd = new Md(level);
+            var newMd = new InMemoryMd(level);
             _allMds[newMd.MdLocator.Json()] = newMd;
             return newMd;
         }
@@ -43,7 +43,7 @@ namespace SAFE.DataAccess
             var key = location.Json();
             if (!_allMds.ContainsKey(key)) // if not found, create with level 0
             {
-                var md = Md.Create(level: 0);
+                var md = InMemoryMd.Create(level: 0);
                 _allMds[md.MdLocator.Json()] = md;
                 return md;
             }
@@ -63,7 +63,7 @@ namespace SAFE.DataAccess
                 case MdType.Pointers:
                     return _pointerFields.Values
                         .Select(c => Locate(c.MdLocator))
-                        .SelectMany(c => (c as Md).GetAllPointerValues());
+                        .SelectMany(c => (c as InMemoryMd).GetAllPointerValues());
                 case MdType.Values:
                     return _valueFields
                         .Where(c => c.Value.ValueType != typeof(MdMetadata).Name)
@@ -90,7 +90,7 @@ namespace SAFE.DataAccess
                 case MdType.Pointers:
                     return _pointerFields.Values
                         .Select(c => Locate(c.MdLocator))
-                        .SelectMany(c => (c as Md).GetAllValues());
+                        .SelectMany(c => (c as InMemoryMd).GetAllValues());
                 case MdType.Values:
                     return _valueFields
                         .Select(c => c.Value)
@@ -238,7 +238,7 @@ namespace SAFE.DataAccess
                     if (target.IsFull) 
                         return ExpandLevel(key, value);
 
-                    return (target as Md).Add(key, value);
+                    return (target as InMemoryMd).Add(key, value);
                 case MdType.Values:
                     if (_valueFields.ContainsKey(key))
                         return new ValueAlreadyExists<Pointer>($"Key: {key}.");
@@ -261,8 +261,8 @@ namespace SAFE.DataAccess
             if (Level == 0)
                 return new ArgumentOutOfRange<Pointer>(nameof(Level));
 
-            var md = Md.Create(Level - 1);
-            var leafPointer = (md as Md).Add(key, value);
+            var md = InMemoryMd.Create(Level - 1);
+            var leafPointer = (md as InMemoryMd).Add(key, value);
             if (!leafPointer.HasValue)
                 return leafPointer;
 

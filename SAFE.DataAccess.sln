@@ -13,7 +13,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SAFE.DataAccess.Common", "S
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ExampleSystem", "ExampleSystem\ExampleSystem.csproj", "{F94F0B44-E4BA-4580-96BC-FF67AF284FBF}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Misc", "Misc", "{28DE24B3-8774-4C4A-92D9-A4A1972C395B}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Demos", "Demos", "{28DE24B3-8774-4C4A-92D9-A4A1972C395B}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SAFE.DataAccess.Client", "SAFE.DataAccess.Client\SAFE.DataAccess.Client.csproj", "{D7D661A3-2D45-48FE-8916-010C4A6588DB}"
 EndProject

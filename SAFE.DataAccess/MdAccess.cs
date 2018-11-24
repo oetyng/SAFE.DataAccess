@@ -30,8 +30,8 @@ namespace SAFE.DataAccess
 
         public static void UseInMemoryDb()
         {
-            SetCreator(level => Task.FromResult(Md.Create(level)));
-            SetLocator(location => Task.FromResult(Result.OK(Md.Locate(location))));
+            SetCreator(level => Task.FromResult(InMemoryMd.Create(level)));
+            SetLocator(location => Task.FromResult(Result.OK(InMemoryMd.Locate(location))));
         }
     }
 }

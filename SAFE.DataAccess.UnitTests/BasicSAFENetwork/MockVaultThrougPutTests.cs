@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SAFE.DataAccess.UnitTests
@@ -33,8 +34,8 @@ namespace SAFE.DataAccess.UnitTests
         {
             try
             {
-                for (int i = 0; i < 10000; i++)
-                    await FillMd(i);
+                ////for (int i = 0; i < 10000; i++)
+                ////    await FillMd(i);
             }
             catch (Exception ex)
             {
@@ -46,32 +47,67 @@ namespace SAFE.DataAccess.UnitTests
         {
             iteration *= 1000;
             var sw = new Stopwatch();
-            var md = await GetNewMd();
+            var md = await GetNewMd().ConfigureAwait(false);
             await NewMetadata(md);
             for (int i = 0; i < MdMetadata.Capacity; i++)
             {
                 var key = $"theKey_{i}";
                 var obj = new StoredValue(i);
                 sw.Restart();
-                await AddObjectAsync(md, key, obj);
+                await AddObjectAsync(md, key, obj).ConfigureAwait(false);
                 sw.Stop();
                 Debug.WriteLine($"{i + iteration + 1}: {sw.ElapsedMilliseconds}");
             }
             _metadata = null;
         }
 
+        [TestMethod]
+        public void Parallel_Insert_performance()
+        {
+            try
+            {
+                int count = 0;
+                int increment() => Interlocked.Increment(ref count);
+                Parallel.ForEach(Enumerable.Range(0, 4), i =>
+                {
+                    ThreadedFillMd(increment).GetAwaiter().GetResult();
+                });
+            }
+            catch (Exception ex)
+            {
+                Assert.Fail();
+            }
+        }
+
+        async Task ThreadedFillMd(Func<int> incrCount)
+        {
+            var sw = new Stopwatch();
+            var md = await GetNewMd().ConfigureAwait(false);
+            await NewMetadata(md);
+            for (int i = 0; i < MdMetadata.Capacity; i++)
+            {
+                var key = $"theKey_{i}";
+                var obj = new StoredValue(i);
+                sw.Restart();
+                await AddObjectAsync(md, key, obj).ConfigureAwait(false);
+                sw.Stop();
+                Debug.WriteLine($"{incrCount()}: {sw.ElapsedMilliseconds}");
+            }
+            _metadata = null;
+        }
+
         async Task<MDataInfo> GetNewMd()
         {
-            using (var permissionsHandle = await _session.MDataPermissions.NewAsync())
+            using (var permissionsHandle = await _session.MDataPermissions.NewAsync().ConfigureAwait(false))
             {
-                using (var appSignPkH = await _session.Crypto.AppPubSignKeyAsync())
+                using (var appSignPkH = await _session.Crypto.AppPubSignKeyAsync().ConfigureAwait(false))
                 {
-                    await _session.MDataPermissions.InsertAsync(permissionsHandle, appSignPkH, _networkOps.GetFullPermissions());
+                    await _session.MDataPermissions.InsertAsync(permissionsHandle, appSignPkH, _networkOps.GetFullPermissions()).ConfigureAwait(false);
                 }
 
-                var md = await _session.MDataInfoActions.RandomPublicAsync(16001);
+                var md = await _session.MDataInfoActions.RandomPublicAsync(16001).ConfigureAwait(false);
 
-                await _session.MData.PutAsync(md, permissionsHandle, NativeHandle.Zero); // <----------------------------------------------    Commit ------------------------
+                await _session.MData.PutAsync(md, permissionsHandle, NativeHandle.Zero).ConfigureAwait(false); // <----------------------------------------------    Commit ------------------------
                 return md;
             }
         }

@@ -9,6 +9,11 @@ namespace SAFE.DataAccess
         Pointers = 1
     }
 
+    public class MdMetadata
+    {
+        public const int Capacity = 999; // Since 1 entry is reserved for metadata itself.
+    }
+
     public static class DataProtocol
     {
         public const ulong DEFAULT_PROTOCOL = 20100;
