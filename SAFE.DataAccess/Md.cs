@@ -14,29 +14,18 @@ namespace SAFE.DataAccess
 
         Dictionary<string, StoredValue> _valueFields = new Dictionary<string, StoredValue>();
         Dictionary<int, Pointer> _pointerFields = new Dictionary<int, Pointer>();
-        MdMetadata _metadata;
 
-        MdMetadata Metadata
-        {
-            get
-            {
-                if (_metadata == null)
-                    _metadata = _valueFields["metadata"].Payload.Parse<MdMetadata>();
-                return _metadata;
-            }
-        }
-
-        public int Level => Metadata.Level;
-        public int Count => Metadata.Count;
-        public MdLocation MdLocation => Metadata.MdLocation;
-        public bool IsFull => Metadata.Count > MdMetadata.Capacity;
-        public MdType Type => Metadata.Type;
+        public int Level { get; set; }
+        public int Count { get; set; }
+        public MdLocator MdLocator { get; set; }
+        public bool IsFull => Count > MdMetadata.Capacity;
+        public MdType Type { get; set; }
 
         private Md(int level)
         {
-            var xor = new MdLocation(new byte[32], DataProtocol.DEFAULT_PROTOCOL);
-            _rand.NextBytes(xor.XORName);
-            _valueFields["metadata"] = new StoredValue(new MdMetadata(level, xor));
+            MdLocator = new MdLocator(new byte[32], DataProtocol.DEFAULT_PROTOCOL);
+            _rand.NextBytes(MdLocator.XORName);
+            _valueFields["0"] = new StoredValue(level);
         }
 
         Random _rand = new Random();
@@ -44,18 +33,18 @@ namespace SAFE.DataAccess
         public static IMd Create(int level)
         {
             var newMd = new Md(level);
-            _allMds[newMd.MdLocation.Json()] = newMd;
+            _allMds[newMd.MdLocator.Json()] = newMd;
             return newMd;
         }
 
-        public static IMd Locate(MdLocation location)
+        public static IMd Locate(MdLocator location)
         {
             // try find on network
             var key = location.Json();
             if (!_allMds.ContainsKey(key)) // if not found, create with level 0
             {
                 var md = Md.Create(level: 0);
-                _allMds[md.MdLocation.Json()] = md;
+                _allMds[md.MdLocator.Json()] = md;
                 return md;
             }
 
@@ -73,14 +62,14 @@ namespace SAFE.DataAccess
             {
                 case MdType.Pointers:
                     return _pointerFields.Values
-                        .Select(c => Locate(c.MdLocation))
+                        .Select(c => Locate(c.MdLocator))
                         .SelectMany(c => (c as Md).GetAllPointerValues());
                 case MdType.Values:
                     return _valueFields
                         .Where(c => c.Value.ValueType != typeof(MdMetadata).Name)
                         .Select(c => (new Pointer
                         {
-                            MdLocation = this.MdLocation,
+                            MdLocator = this.MdLocator,
                             MdKey = c.Key,
                             ValueType = c.Value.ValueType
                         }, c.Value));
@@ -100,7 +89,7 @@ namespace SAFE.DataAccess
             {
                 case MdType.Pointers:
                     return _pointerFields.Values
-                        .Select(c => Locate(c.MdLocation))
+                        .Select(c => Locate(c.MdLocator))
                         .SelectMany(c => (c as Md).GetAllValues());
                 case MdType.Values:
                     return _valueFields
@@ -149,7 +138,7 @@ namespace SAFE.DataAccess
                         var value = _valueFields[key];
                         return Result.OK((new Pointer
                         {
-                            MdLocation = this.MdLocation,
+                            MdLocator = this.MdLocator,
                             MdKey = key,
                             ValueType = value.ValueType
                         }, value));
@@ -169,11 +158,11 @@ namespace SAFE.DataAccess
         Result<Pointer> Add(Pointer pointer)
         {
             if (IsFull)
-                return new MdOutOfEntriesError<Pointer>($"Filled: {Metadata.Count}/{MdMetadata.Capacity}");
+                return new MdOutOfEntriesError<Pointer>($"Filled: {Count}/{MdMetadata.Capacity}");
             var index = Count + 1;
             pointer.MdKey = index.ToString();
             _pointerFields[index] = pointer;
-            _metadata.IncrementCount();
+            Count++;
             return Result.OK(pointer);
         }
 
@@ -192,7 +181,7 @@ namespace SAFE.DataAccess
                     _valueFields[key] = value;
                     return Result.OK(new Pointer
                     {
-                        MdLocation = this.MdLocation,
+                        MdLocator = this.MdLocator,
                         MdKey = key,
                         ValueType = value.ValueType
                     });
@@ -219,7 +208,7 @@ namespace SAFE.DataAccess
                     _valueFields.Remove(key);
                     return Result.OK(new Pointer
                     {
-                        MdLocation = this.MdLocation,
+                        MdLocator = this.MdLocator,
                         MdKey = key,
                         ValueType = value.ValueType
                     });
@@ -238,14 +227,14 @@ namespace SAFE.DataAccess
         Result<Pointer> Add(string key, StoredValue value)
         {
             if (IsFull)
-                return new MdOutOfEntriesError<Pointer>($"Filled: {Metadata.Count}/{MdMetadata.Capacity}");
+                return new MdOutOfEntriesError<Pointer>($"Filled: {Count}/{MdMetadata.Capacity}");
             switch (Type)
             {
                 case MdType.Pointers:
                     if (Count == 0)
                         return ExpandLevel(key, value);
 
-                    var target = Locate(_pointerFields[Count].MdLocation);
+                    var target = Locate(_pointerFields[Count].MdLocator);
                     if (target.IsFull) 
                         return ExpandLevel(key, value);
 
@@ -255,10 +244,10 @@ namespace SAFE.DataAccess
                         return new ValueAlreadyExists<Pointer>($"Key: {key}.");
 
                     _valueFields[key] = value;
-                    _metadata.IncrementCount();
+                    Count++;
                     return Result.OK(new Pointer
                     {
-                        MdLocation = this.MdLocation,
+                        MdLocator = this.MdLocator,
                         MdKey = key,
                         ValueType = value.ValueType
                     });
@@ -282,7 +271,7 @@ namespace SAFE.DataAccess
                 case MdType.Pointers: // i.e. we have still not reached the end of the tree
                     Add(new Pointer
                     {
-                        MdLocation = md.MdLocation,
+                        MdLocator = md.MdLocator,
                         ValueType = typeof(Pointer).Name
                     });
                     break;

@@ -10,7 +10,7 @@ namespace SAFE.DataAccess
     {
         IMd _info;
         TypeStoreInfo _typeInfo;
-        protected Dictionary<string, MdLocation> _dataTreeAddresses = new Dictionary<string, MdLocation>();
+        protected Dictionary<string, MdLocator> _dataTreeAddresses = new Dictionary<string, MdLocator>();
         protected Dictionary<string, DataTree> _dataTreeCache = new Dictionary<string, DataTree>();
 
         IIndexer _indexer;
@@ -115,7 +115,7 @@ namespace SAFE.DataAccess
                 return Result.Fail<T>(findResult.ErrorCode.Value, findResult.ErrorMsg);
 
             // modify md key
-            var mdResult = await MdAccess.LocateAsync(findResult.Value.MdLocation).ConfigureAwait(false);
+            var mdResult = await MdAccess.LocateAsync(findResult.Value.MdLocator).ConfigureAwait(false);
             if (!mdResult.HasValue)
                 return Result.Fail<T>(mdResult.ErrorCode.Value, mdResult.ErrorMsg);
 
@@ -126,6 +126,8 @@ namespace SAFE.DataAccess
                 return Result.Fail<T>(setResult.ErrorCode.Value, setResult.ErrorMsg);
 
             // TODO: re-index
+            //_indexer.Delete(key);
+            //IndexOnKey(typeof(T).Name, key, setResult.Value);
         }
 
         public async Task<Result<Pointer>> Delete<T>(string key) // What to return? Result<(Pointer, Value)>, Result<Pointer>, Result<Value>, Result<T>
@@ -134,7 +136,7 @@ namespace SAFE.DataAccess
             if (!findResult.HasValue)
                 return findResult;
 
-            var mdResult = await MdAccess.LocateAsync(findResult.Value.MdLocation).ConfigureAwait(false);
+            var mdResult = await MdAccess.LocateAsync(findResult.Value.MdLocator).ConfigureAwait(false);
             if (!mdResult.HasValue)
                 return Result.Fail<Pointer>(mdResult.ErrorCode.Value, mdResult.ErrorMsg);
 
@@ -142,6 +144,7 @@ namespace SAFE.DataAccess
             return deleteResult;
 
             // TODO: re-index
+            //_indexer.Delete(key);
         }
 
         async Task<Result<Pointer>> FindValuePointerByKeyAsync<T>(string key)
@@ -181,12 +184,12 @@ namespace SAFE.DataAccess
             if (_dataTreeAddresses.ContainsKey(type))
                 return;
 
-            Task onHeadChange(MdLocation newLocation) => UpdateTypeStores(type, newLocation);
+            Task onHeadChange(MdLocator newLocation) => UpdateTypeStores(type, newLocation);
             
             var dataTree = await DataTreeFactory.CreateAsync(onHeadChange).ConfigureAwait(false);
             _dataTreeCache[type] = dataTree;
-            _dataTreeAddresses[type] = dataTree.MdLocation;
-            await _typeInfo.AddAsync(type, dataTree.MdLocation).ConfigureAwait(false);
+            _dataTreeAddresses[type] = dataTree.MdLocator;
+            await _typeInfo.AddAsync(type, dataTree.MdLocator).ConfigureAwait(false);
         }
 
         protected async Task LoadStoreAsync(string type)
@@ -194,7 +197,7 @@ namespace SAFE.DataAccess
             if (!_dataTreeAddresses.ContainsKey(type))
                 throw new InvalidOperationException($"Store does not exist! {type}");
 
-            Task onHeadChange(MdLocation newXOR) => UpdateTypeStores(type, newXOR);
+            Task onHeadChange(MdLocator newXOR) => UpdateTypeStores(type, newXOR);
             var headResult = await MdAccess.LocateAsync(_dataTreeAddresses[type]).ConfigureAwait(false);
             if (!headResult.HasValue)
                 throw new Exception($"Error code: {headResult.ErrorCode.Value}. {headResult.ErrorMsg}");
@@ -202,7 +205,7 @@ namespace SAFE.DataAccess
             _dataTreeCache[type] = dataTree;
         }
 
-        async Task UpdateTypeStores(string type, MdLocation location)
+        async Task UpdateTypeStores(string type, MdLocator location)
         {
             await _typeInfo.UpdateAsync(type, location).ConfigureAwait(false);
             _dataTreeAddresses[type] = location;

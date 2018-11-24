@@ -25,11 +25,11 @@ namespace SAFE.DataAccess.Network
         {
             if (!await ExistsManagerAsync())
             {
-                // Create new db container
+                // Create new md head container
                 _mdContainer = new MdContainer();
                 var serializedDbContainer = _mdContainer.Json();
 
-                // Update App Container (store db info to it)
+                // Update App Container (store md head info to it)
                 var appContainer = await Session.AccessContainer.GetMDataInfoAsync(AppContainerPath);
                 var dbIdCipherBytes = await Session.MDataInfoActions.EncryptEntryKeyAsync(appContainer, nameof(MdContainer).ToUtfBytes());
                 var dbCipherBytes = await Session.MDataInfoActions.EncryptEntryValueAsync(appContainer, serializedDbContainer.ToUtfBytes());
@@ -50,9 +50,9 @@ namespace SAFE.DataAccess.Network
 
             var mdId = $"{_protocol}/{mdName}";
 
-            if (_mdContainer.MdLocations.ContainsKey(mdId))
+            if (_mdContainer.MdLocators.ContainsKey(mdId))
             {
-                var location = _mdContainer.MdLocations[mdId];
+                var location = _mdContainer.MdLocators[mdId];
                 var mdResult = await LocateMdOps(location);
                 return new MdHead(mdResult.Value, mdId);
             }
@@ -65,20 +65,18 @@ namespace SAFE.DataAccess.Network
                     await Session.MDataPermissions.InsertAsync(permissionsHandle, appSignPkH, GetFullPermissions());
                 }
 
-                // Create one Md for holding category partition info
                 var mDataInfo = await CreateEmptyRandomPrivateMd(permissionsHandle, DataProtocol.DEFAULT_PROTOCOL);// TODO: DataProtocol.MD_HEAD);
-                var location = new MdLocation(mDataInfo.Name, mDataInfo.TypeTag);
-                _mdContainer.MdLocations[mdId] = location;
+                var location = new MdLocator(mDataInfo.Name, mDataInfo.TypeTag);
+                _mdContainer.MdLocators[mdId] = location;
 
-                // Finally update App Container (store db info to it)
-
-                var serializedDbContainer = _mdContainer.Json();
+                // Finally update App Container (store md head info to it)
+                var serializedMdContainer = _mdContainer.Json();
                 var appContainer = await Session.AccessContainer.GetMDataInfoAsync(AppContainerPath);
-                var dbIdCipherBytes = await Session.MDataInfoActions.EncryptEntryKeyAsync(appContainer, nameof(MdContainer).ToUtfBytes());
-                var dbCipherBytes = await Session.MDataInfoActions.EncryptEntryValueAsync(appContainer, serializedDbContainer.ToUtfBytes());
+                var mdKeyCipherBytes = await Session.MDataInfoActions.EncryptEntryKeyAsync(appContainer, nameof(MdContainer).ToUtfBytes());
+                var mdCipherBytes = await Session.MDataInfoActions.EncryptEntryValueAsync(appContainer, serializedMdContainer.ToUtfBytes());
                 using (var appContEntryActionsH = await Session.MDataEntryActions.NewAsync())
                 {
-                    await Session.MDataEntryActions.UpdateAsync(appContEntryActionsH, dbIdCipherBytes, dbCipherBytes, _mdContainerVersion + 1);
+                    await Session.MDataEntryActions.UpdateAsync(appContEntryActionsH, mdKeyCipherBytes, mdCipherBytes, _mdContainerVersion + 1);
                     await Session.MData.MutateEntriesAsync(appContainer, appContEntryActionsH); // <----------------------------------------------    Commit ------------------------
                 }
 
@@ -94,43 +92,35 @@ namespace SAFE.DataAccess.Network
             return MdOps.CreateNewMdOpsAsync(level, new NetworkDataOps(Session), protocol);
         }
 
-        public Task<Result<IMd>> LocateMdOps(MdLocation location)
+        public Task<Result<IMd>> LocateMdOps(MdLocator location)
         {
             return MdOps.LocateAsync(location, new NetworkDataOps(Session));
         }
 
-        //async Task<IMd> GetMdAsync(List<byte> addressBytes)
-        //{
-        //    var mdInfo = await _session.MDataInfoActions.DeserialiseAsync(addressBytes);
-        //    var md = new MdOps(mdInfo, _session);
-        //    await md.Initialize(level: 0);
-        //    return md;
-        //}
-
         async Task<bool> ExistsManagerAsync()
         {
             var appCont = await Session.AccessContainer.GetMDataInfoAsync(AppContainerPath);
-            var dbIdCipherBytes = await Session.MDataInfoActions.EncryptEntryKeyAsync(appCont, nameof(MdContainer).ToUtfBytes());
+            var mdKeyCipherBytes = await Session.MDataInfoActions.EncryptEntryKeyAsync(appCont, nameof(MdContainer).ToUtfBytes());
             var keys = await Session.MData.ListKeysAsync(appCont);
-            return keys.Any(c => c.Val.SequenceEqual(dbIdCipherBytes));
+            return keys.Any(c => c.Val.SequenceEqual(mdKeyCipherBytes));
         }
 
         async Task<MdContainer> LoadDbContainer()
         {
             var appContainerInfo = await Session.AccessContainer.GetMDataInfoAsync(AppContainerPath);
-            var dbIdCipherBytes = await Session.MDataInfoActions.EncryptEntryKeyAsync(appContainerInfo, nameof(MdContainer).ToUtfBytes());
-            var cipherTxtEntryVal = await Session.MData.GetValueAsync(appContainerInfo, dbIdCipherBytes);
+            var mdKeyCipherBytes = await Session.MDataInfoActions.EncryptEntryKeyAsync(appContainerInfo, nameof(MdContainer).ToUtfBytes());
+            var cipherTxtEntryVal = await Session.MData.GetValueAsync(appContainerInfo, mdKeyCipherBytes);
 
             var plainTxtEntryVal = await Session.MDataInfoActions.DecryptAsync(appContainerInfo, cipherTxtEntryVal.Item1);
-            var dbContainerJson = plainTxtEntryVal.ToUtfString();
-            var dbContainer = dbContainerJson.Parse<MdContainer>();
-            _mdContainer = dbContainer;
-            return dbContainer;
+            var mdContainerJson = plainTxtEntryVal.ToUtfString();
+            var mdContainer = mdContainerJson.Parse<MdContainer>();
+            _mdContainer = mdContainer;
+            return mdContainer;
         }
 
         class MdContainer
         {
-            public Dictionary<string, MdLocation> MdLocations { get; set; } = new Dictionary<string, MdLocation>();
+            public Dictionary<string, MdLocator> MdLocators { get; set; } = new Dictionary<string, MdLocator>();
         }
     }
 }

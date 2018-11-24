@@ -15,17 +15,17 @@ namespace SAFE.DataAccess.Factories
             {
                 typeStoreHead = await MdAccess.CreateAsync(0)
                     .ConfigureAwait(false);
-                await dbInfoMd.AddAsync(TYPE_STORE_HEAD_KEY, new StoredValue(typeStoreHead.MdLocation))
+                await dbInfoMd.AddAsync(TYPE_STORE_HEAD_KEY, new StoredValue(typeStoreHead.MdLocator))
                     .ConfigureAwait(false);
             }
             else
             {
-                var typeStoreHeadLocation = typeStoreResult.Value.Payload.Parse<MdLocation>();
+                var typeStoreHeadLocation = typeStoreResult.Value.Payload.Parse<MdLocator>();
                 typeStoreHead = (await MdAccess.LocateAsync(typeStoreHeadLocation)
                     .ConfigureAwait(false)).Value;
             }
 
-            Task onHeadChange(MdLocation newLocation) => dbInfoMd.SetAsync(TYPE_STORE_HEAD_KEY, new StoredValue(newLocation));
+            Task onHeadChange(MdLocator newLocation) => dbInfoMd.SetAsync(TYPE_STORE_HEAD_KEY, new StoredValue(newLocation));
 
             var dataTree = new DataTree(typeStoreHead, onHeadChange);
 

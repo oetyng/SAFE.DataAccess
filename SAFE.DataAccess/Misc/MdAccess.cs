@@ -5,10 +5,10 @@ namespace SAFE.DataAccess
 {
     public class MdAccess
     {
-        static Func<MdLocation, Task<Result<IMd>>> _locator;
+        static Func<MdLocator, Task<Result<IMd>>> _locator;
         static Func<int, Task<IMd>> _creator;
 
-        public static void SetLocator(Func<MdLocation, Task<Result<IMd>>> locator)
+        public static void SetLocator(Func<MdLocator, Task<Result<IMd>>> locator)
         {
             _locator = locator;
         }
@@ -18,7 +18,7 @@ namespace SAFE.DataAccess
             _creator = creator;
         }
 
-        public static Task<Result<IMd>> LocateAsync(MdLocation location)
+        public static Task<Result<IMd>> LocateAsync(MdLocator location)
         {
             return _locator(location);
         }

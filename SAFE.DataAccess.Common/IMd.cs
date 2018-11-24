@@ -9,7 +9,7 @@ namespace SAFE.DataAccess
         bool IsFull { get; }
         int Level { get; }
         MdType Type { get; }
-        MdLocation MdLocation { get; }
+        MdLocator MdLocator { get; }
 
         Task<Result<Pointer>> AddAsync(Pointer pointer);
         Task<Result<Pointer>> AddAsync(string key, StoredValue value);

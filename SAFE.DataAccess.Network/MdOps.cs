@@ -8,25 +8,22 @@ using System.Threading.Tasks;
 
 namespace SAFE.DataAccess.Network
 {
-    public class MdOps : NetworkDataOps, IMd
+    public sealed class MdOps : NetworkDataOps, IMd
     {
-        protected const string METADATA_KEY = "metadata";
-        protected static readonly List<byte> METADATA_KEY_BYTES;
+        static readonly string METADATA_KEY = 0.ToString();
+        static readonly List<byte> METADATA_KEY_BYTES = METADATA_KEY.ToUtfBytes();
 
-        protected MDataInfo _mdInfo;
-        protected MdMetadata _metadata;
+        MDataInfo _mdInfo;
+        int _count;
+        MdType _type;
+        int _level;
 
-        public MdType Type => _metadata.Type;
-        public int Count => _metadata.Count;
-        public int Level => _metadata.Level;
-        public bool IsFull => _metadata.Count >= MdMetadata.Capacity;
+        public MdType Type => _type;
+        public int Count => _count;
+        public int Level => _level;
+        public bool IsFull => _count >= MdMetadata.Capacity;
         public int Capacity => MdMetadata.Capacity;
-        public MdLocation MdLocation => _metadata.MdLocation;
-
-        static MdOps()
-        {
-            METADATA_KEY_BYTES = METADATA_KEY.ToUtfBytes();
-        }
+        public MdLocator MdLocator => new MdLocator(_mdInfo.Name, _mdInfo.TypeTag);
 
         public MdOps(MDataInfo mdInfo, Session session)
             : base(session)
@@ -40,7 +37,7 @@ namespace SAFE.DataAccess.Network
             return GetOrAddMetadata(level);
         }
 
-        public static async Task<Result<IMd>> LocateAsync(MdLocation location, NetworkDataOps networkDataOp)
+        public static async Task<Result<IMd>> LocateAsync(MdLocator location, NetworkDataOps networkDataOp)
         {
             var mdResult = await networkDataOp.LocatePublicMd(location.XORName, location.TypeTag);
             if (!mdResult.HasValue)
@@ -187,7 +184,7 @@ namespace SAFE.DataAccess.Network
                         var value = valueResult.Value;
                         return Result.OK((new Pointer
                         {
-                            MdLocation = this.MdLocation,
+                            MdLocator = this.MdLocator,
                             MdKey = key,
                             ValueType = value.ValueType
                         }, value));
@@ -219,7 +216,7 @@ namespace SAFE.DataAccess.Network
                         });
                         // from pointerBag get regs to mds
                         var pointerTasks = pointerBag
-                            .Select(c => LocateAsync(c.MdLocation, new NetworkDataOps(Session)));
+                            .Select(c => LocateAsync(c.MdLocator, new NetworkDataOps(Session)));
                         var pointerValues = (await Task.WhenAll(pointerTasks)
                             .ConfigureAwait(false));
                         var valueTasks = pointerValues
@@ -254,7 +251,7 @@ namespace SAFE.DataAccess.Network
             {
                 case MdType.Pointers:
                     var pointerTasks = (await GetAllPointersAsync().ConfigureAwait(false))
-                        .Select(c => LocateAsync(c.MdLocation, new NetworkDataOps(Session)));
+                        .Select(c => LocateAsync(c.MdLocator, new NetworkDataOps(Session)));
                     var pointerValuesTasks = (await Task.WhenAll(pointerTasks).ConfigureAwait(false))
                         .Select(c => c.Value.GetAllPointerValuesAsync());
                     return (await Task.WhenAll(pointerValuesTasks).ConfigureAwait(false))
@@ -283,7 +280,7 @@ namespace SAFE.DataAccess.Network
                         .Where(c => c.Value.ValueType != typeof(MdMetadata).Name)
                         .Select(c => (new Pointer
                         {
-                            MdLocation = this.MdLocation,
+                            MdLocator = this.MdLocator,
                             MdKey = c.Key,
                             ValueType = c.Value.ValueType
                         }, c.Value));
@@ -343,7 +340,7 @@ namespace SAFE.DataAccess.Network
                         if (!pointer.HasValue)
                             return pointer;
 
-                        var targetResult = await LocateAsync(pointer.Value.MdLocation, new NetworkDataOps(Session))
+                        var targetResult = await LocateAsync(pointer.Value.MdLocator, new NetworkDataOps(Session))
                             .ConfigureAwait(false);
                         if (!targetResult.HasValue)
                             return Result.Fail<Pointer>(targetResult.ErrorCode.Value, targetResult.ErrorMsg);
@@ -360,7 +357,7 @@ namespace SAFE.DataAccess.Network
 
                         return Result.OK(new Pointer
                         {
-                            MdLocation = this.MdLocation,
+                            MdLocator = this.MdLocator,
                             MdKey = key,
                             ValueType = value.ValueType
                         });
@@ -387,17 +384,10 @@ namespace SAFE.DataAccess.Network
                 };
                 await InsertEntriesAsync(entryActionsH, insertObj).ConfigureAwait(false);
 
-                // update metadata
-                var meta = GetCountBumpedClone(); // clone and bump
-                var updateObj = new Dictionary<string, (object, ulong)>
-                {
-                    { METADATA_KEY, (new StoredValue(meta), meta.MetadataVersion) }
-                };
-                await UpdateEntriesAsync(entryActionsH, updateObj).ConfigureAwait(false);
-
                 // commit
                 await CommitEntryMutationAsync(_mdInfo, entryActionsH).ConfigureAwait(false);
-                _metadata = meta; // if commit is successful, update our cached meta with bumped metadata instance
+
+                ++_count;
             }
         }
 
@@ -434,20 +424,17 @@ namespace SAFE.DataAccess.Network
             {
                 using (var entryActionsH = await Session.MDataEntryActions.NewAsync().ConfigureAwait(false))
                 {
-                    // update value and update metadata
-                    var meta = GetCountBumpedClone(); // clone and bump
+                    // update value
                     var updateObj = new Dictionary<string, (object, ulong)>
                     {
                         { key, (value, version + 1) },
-                        { METADATA_KEY, (new StoredValue(meta), meta.MetadataVersion) }
                     };
                     await UpdateEntriesAsync(entryActionsH, updateObj).ConfigureAwait(false);
                     await CommitEntryMutationAsync(_mdInfo, entryActionsH).ConfigureAwait(false);
-                    _metadata = meta; // if commit is successful, update our cached meta with bumped metadata instance
 
                     return Result.OK(new Pointer
                     {
-                        MdLocation = this.MdLocation,
+                        MdLocator = this.MdLocator,
                         MdKey = key,
                         ValueType = value.ValueType
                     });
@@ -484,17 +471,8 @@ namespace SAFE.DataAccess.Network
                             };
                             await DeleteEntriesAsync(entryActionsH, deleteObj).ConfigureAwait(false);
 
-                            // update metadata
-                            var meta = GetCountDecreasedClone(); // clone and bump
-                            var updateObj = new Dictionary<string, (object, ulong)>
-                            {
-                                { METADATA_KEY, (new StoredValue(meta), meta.MetadataVersion) }
-                            };
-                            await UpdateEntriesAsync(entryActionsH, updateObj).ConfigureAwait(false);
-
                             // commit
                             await CommitEntryMutationAsync(_mdInfo, entryActionsH).ConfigureAwait(false);
-                            _metadata = meta; // if commit is successful, update our cached meta with bumped metadata instance
                         }
 
                         var json = mdRef.Item1.ToUtfString();
@@ -503,7 +481,7 @@ namespace SAFE.DataAccess.Network
 
                         return Result.OK(new Pointer
                         {
-                            MdLocation = this.MdLocation,
+                            MdLocator = this.MdLocator,
                             MdKey = key,
                             ValueType = value.ValueType
                         });
@@ -535,66 +513,25 @@ namespace SAFE.DataAccess.Network
         // Creates if it doesn't exist
         async Task GetOrAddMetadata(int level = 0)
         {
-            if (_metadata != null)
-                return;
             var keys = await Session.MData.ListKeysAsync(_mdInfo).ConfigureAwait(false);
-            if (keys.Any(c => c.Val.SequenceEqual(METADATA_KEY_BYTES)))
+            if (keys.Count > 0)
             {
+                _count = keys.Count;
                 var metaMD = await Session.MData.GetValueAsync(_mdInfo, METADATA_KEY_BYTES).ConfigureAwait(false);
-                _metadata = metaMD.Item1.ToUtfString().Parse<StoredValue>().Parse<MdMetadata>();
+                _level = metaMD.Item1.ToUtfString().Parse<int>();
                 return;
             }
 
-            var meta = new MdMetadata(level, new MdLocation(_mdInfo.Name, _mdInfo.TypeTag));
-
-            var value = new StoredValue(meta);
-
             var insertObj = new Dictionary<string, object>
             {
-                { METADATA_KEY, value }
+                { METADATA_KEY, level }
             };
             using (var entryActionsH = await Session.MDataEntryActions.NewAsync().ConfigureAwait(false))
             {
                 await InsertEntriesAsync(entryActionsH, insertObj).ConfigureAwait(false);
                 await CommitEntryMutationAsync(_mdInfo, entryActionsH).ConfigureAwait(false);
+                ++_count;
             }
-            _metadata = meta;
-        }
-
-        async Task Update(MdMetadata meta)
-        {
-            meta.IncrementVersion(); // increase version
-
-            var value = new StoredValue(meta);
-
-            var insertObj = new Dictionary<string, (object, ulong)>
-            {
-                { METADATA_KEY, (value, meta.MetadataVersion) }
-            };
-            using (var entryActionsH = await Session.MDataEntryActions.NewAsync().ConfigureAwait(false))
-            {
-                await UpdateEntriesAsync(entryActionsH, insertObj).ConfigureAwait(false);
-                await CommitEntryMutationAsync(_mdInfo, entryActionsH).ConfigureAwait(false);
-            }
-            _metadata = meta;
-        }
-
-        // so we don't get left with an updated cache after failed commit
-        protected MdMetadata GetCountBumpedClone()
-        {
-            var meta = _metadata.Clone();
-            meta.IncrementCount();
-            meta.IncrementVersion(); // increase version count
-            return meta;
-        }
-
-        // so we don't get left with an updated cache after failed commit
-        protected MdMetadata GetCountDecreasedClone()
-        {
-            var meta = _metadata.Clone();
-            meta.DecrementCount();
-            meta.DecrementVersion(); // increase version count
-            return meta;
         }
 
         async Task<Result<Pointer>> ExpandLevelAsync(string key, StoredValue value)
@@ -612,14 +549,14 @@ namespace SAFE.DataAccess.Network
                 case MdType.Pointers: // i.e. we have still not reached the end of the tree
                     await AddAsync(new Pointer
                     {
-                        MdLocation = md.MdLocation,
+                        MdLocator = md.MdLocator,
                         ValueType = typeof(Pointer).Name
                     }).ConfigureAwait(false);
                     break;
                 case MdType.Values:  // i.e. we are now right above leaf level
                     await AddAsync(new Pointer
                     {
-                        MdLocation = leafPointer.Value.MdLocation,
+                        MdLocator = leafPointer.Value.MdLocator,
                         ValueType = typeof(Pointer).Name
                     }).ConfigureAwait(false);
                     break;

@@ -91,9 +91,6 @@ namespace SAFE.DataAccess.UnitTests
                 var addResult = await dbResult.Value.AddAsync(theKey, theData).ConfigureAwait(false);
                 sw.Stop();
 
-                if (!addResult.HasValue)
-                { }
-
                 // Assert 1
                 Assert.IsNotNull(addResult);
                 Assert.IsInstanceOfType(addResult, typeof(Result<Pointer>));

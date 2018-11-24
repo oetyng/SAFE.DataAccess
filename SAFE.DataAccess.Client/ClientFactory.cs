@@ -33,14 +33,14 @@ namespace SAFE.DataAccess.Client
 
         public async Task<Result<Database>> GetOrAddDataBaseAsync(string dbName)
         {
-            var indexLocation = new MdLocation(System.Text.Encoding.UTF8.GetBytes($"{dbName}_indexer"), DataProtocol.DEFAULT_PROTOCOL);
+            var indexLocation = new MdLocator(System.Text.Encoding.UTF8.GetBytes($"{dbName}_indexer"), DataProtocol.DEFAULT_PROTOCOL);
             var indexMd = await MdAccess.LocateAsync(indexLocation).ConfigureAwait(false);
             if (!indexMd.HasValue)
                 return Result.Fail<Database>(indexMd.ErrorCode.Value, indexMd.ErrorMsg);
             var indexHead = new MdHead(indexMd.Value, dbName);
             var indexer = await Indexer.GetOrAddAsync(indexHead);
 
-            var dbLocation = new MdLocation(System.Text.Encoding.UTF8.GetBytes(dbName), DataProtocol.DEFAULT_PROTOCOL);
+            var dbLocation = new MdLocator(System.Text.Encoding.UTF8.GetBytes(dbName), DataProtocol.DEFAULT_PROTOCOL);
             var dbMd = await MdAccess.LocateAsync(dbLocation).ConfigureAwait(false);
             if (!dbMd.HasValue)
                 return Result.Fail<Database>(dbMd.ErrorCode.Value, dbMd.ErrorMsg);

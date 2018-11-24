@@ -5,8 +5,8 @@ namespace SAFE.DataAccess
 {
     public enum MdType
     {
-        Values,
-        Pointers
+        Values = 0,
+        Pointers = 1
     }
 
     public static class DataProtocol
@@ -17,12 +17,12 @@ namespace SAFE.DataAccess
         public const ulong MD_VALUE = 20103;
     }
 
-    public class MdLocation
+    public class MdLocator
     {
         [JsonConstructor]
-        MdLocation() { }
+        MdLocator() { }
 
-        public MdLocation(byte[] xorName, ulong typeTag)
+        public MdLocator(byte[] xorName, ulong typeTag)
         {
             XORName = xorName;
             TypeTag = typeTag;
@@ -33,7 +33,7 @@ namespace SAFE.DataAccess
 
     public class Pointer
     {
-        public MdLocation MdLocation { get; set; } // The address of the Md this points at.
+        public MdLocator MdLocator { get; set; } // The address of the Md this points at.
         public string MdKey { get; set; } // The key under which the value is stored in that Md.
         public string ValueType { get; set; } // The type of the value stored.
     }

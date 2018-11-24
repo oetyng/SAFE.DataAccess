@@ -90,7 +90,7 @@ namespace SAFE.DataAccess
             var results = await Task.WhenAll(pointers
                 .Select(async c =>
                 {
-                    var mdResult = await MdAccess.LocateAsync(c.MdLocation).ConfigureAwait(false);
+                    var mdResult = await MdAccess.LocateAsync(c.MdLocator).ConfigureAwait(false);
                     if (!mdResult.HasValue)
                         return Result.Fail<StoredValue>(mdResult.ErrorCode.Value, mdResult.ErrorMsg);
                     return await mdResult.Value.GetValueAsync(c.MdKey).ConfigureAwait(false);
@@ -120,7 +120,7 @@ namespace SAFE.DataAccess
             var results = await Task.WhenAll(pointers
                 .Select(async c =>
                 {
-                    var mdResult = await MdAccess.LocateAsync(c.MdLocation).ConfigureAwait(false);
+                    var mdResult = await MdAccess.LocateAsync(c.MdLocator).ConfigureAwait(false);
                     if (!mdResult.HasValue)
                         return Result.Fail<(Pointer, StoredValue)>(mdResult.ErrorCode.Value, mdResult.ErrorMsg);
                     return await mdResult.Value.GetPointerAndValueAsync(c.MdKey).ConfigureAwait(false);

@@ -21,7 +21,7 @@ namespace SAFE.DataAccess.UnitTests
         [TestMethod]
         public async Task PublicMd_IsFound_When_TagType_IsSame()
         {
-            var (xor, tag) = await MdLocation(_session, pub: true);
+            var (xor, tag) = await MdLocator(_session, pub: true);
             var dstPubIdMDataInfoH = new MDataInfo { Name = xor, TypeTag = tag };
             try
             {
@@ -37,7 +37,7 @@ namespace SAFE.DataAccess.UnitTests
         [TestMethod]
         public async Task PublicMd_IsNOTFound_When_TagType_IsNotSame()
         {
-            var (xor, tag) = await MdLocation(_session, pub: true);
+            var (xor, tag) = await MdLocator(_session, pub: true);
             var dstPubIdMDataInfoH = new MDataInfo { Name = xor, TypeTag = 15001 };
             try
             {
@@ -51,7 +51,7 @@ namespace SAFE.DataAccess.UnitTests
         [TestMethod]
         public async Task PrivateMd_IsFound_When_TagType_IsSame()
         {
-            var (xor, tag) = await MdLocation(_session);
+            var (xor, tag) = await MdLocator(_session);
             var dstPubIdMDataInfoH = new MDataInfo { Name = xor, TypeTag = tag };
             try
             {
@@ -67,7 +67,7 @@ namespace SAFE.DataAccess.UnitTests
         [TestMethod]
         public async Task PrivateMd_IsNOTFound_When_TagType_IsNotSame()
         {
-            var (xor, tag) = await MdLocation(_session);
+            var (xor, tag) = await MdLocator(_session);
             var dstPubIdMDataInfoH = new MDataInfo { Name = xor, TypeTag = 15001 };
             try
             {
@@ -78,7 +78,7 @@ namespace SAFE.DataAccess.UnitTests
             { }
         }
 
-        async Task<(byte[], ulong)> MdLocation(Session session, bool pub = false)
+        async Task<(byte[], ulong)> MdLocator(Session session, bool pub = false)
         {
             var networkOps = new Network.NetworkDataOps(session);
 

@@ -7,11 +7,12 @@ namespace SAFE.DataAccess
     public class DataTree
     {
         IMd _head;
-        Func<MdLocation, Task> _onHeadAddressChange;
+        IMd _currentLeaf;
+        Func<MdLocator, Task> _onHeadAddressChange;
 
-        public MdLocation MdLocation => _head.MdLocation;
+        public MdLocator MdLocator => _head.MdLocator;
 
-        public DataTree(IMd head, Func<MdLocation, Task> onHeadAddressChange)
+        public DataTree(IMd head, Func<MdLocator, Task> onHeadAddressChange)
         {
             _head = head;
             _onHeadAddressChange = onHeadAddressChange;
@@ -26,15 +27,29 @@ namespace SAFE.DataAccess
                 var newHead = await MdAccess.CreateAsync(_head.Level + 1).ConfigureAwait(false);
                 var pointer = new Pointer
                 {
-                    MdLocation = _head.MdLocation,
+                    MdLocator = _head.MdLocator,
                     ValueType = typeof(Pointer).Name
                 };
                 await newHead.AddAsync(pointer).ConfigureAwait(false);
                 _head = newHead;
-                await _onHeadAddressChange(newHead.MdLocation).ConfigureAwait(false);
+                await _onHeadAddressChange(newHead.MdLocator).ConfigureAwait(false);
             }
 
-            return await _head.AddAsync(key, value).ConfigureAwait(false);
+            return await DirectlyAddToLeaf(key, value).ConfigureAwait(false);
+        }
+
+        async Task<Result<Pointer>> DirectlyAddToLeaf(string key, StoredValue value)
+        {
+            if (_currentLeaf == null || _currentLeaf.IsFull)
+            {
+                var result = await _head.AddAsync(key, value).ConfigureAwait(false);
+                var leafResult = await MdAccess.LocateAsync(result.Value.MdLocator);
+                if (leafResult.HasValue)
+                    _currentLeaf = leafResult.Value;
+                return result;
+            }
+            else
+                return await _currentLeaf.AddAsync(key, value);
         }
 
         public Task<IEnumerable<StoredValue>> GetAllValuesAsync()
