@@ -20,7 +20,6 @@ namespace SAFE.DataAccess.UnitTests
         Session _session;
         Network.NetworkDataOps _networkOps;
 
-        MdMetadata _metadata;
         [TestInitialize]
         public async Task TestInitialize()
         {
@@ -34,8 +33,8 @@ namespace SAFE.DataAccess.UnitTests
         {
             try
             {
-                ////for (int i = 0; i < 10000; i++)
-                ////    await FillMd(i);
+                for (int i = 0; i < 1000; i++)
+                    await FillMd(i);
             }
             catch (Exception ex)
             {
@@ -58,7 +57,6 @@ namespace SAFE.DataAccess.UnitTests
                 sw.Stop();
                 Debug.WriteLine($"{i + iteration + 1}: {sw.ElapsedMilliseconds}");
             }
-            _metadata = null;
         }
 
         [TestMethod]
@@ -93,7 +91,6 @@ namespace SAFE.DataAccess.UnitTests
                 sw.Stop();
                 Debug.WriteLine($"{incrCount()}: {sw.ElapsedMilliseconds}");
             }
-            _metadata = null;
         }
 
         async Task<MDataInfo> GetNewMd()
