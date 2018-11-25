@@ -66,7 +66,7 @@ namespace SAFE.DataAccess
                         .SelectMany(c => (c as InMemoryMd).GetAllPointerValues());
                 case MdType.Values:
                     return _valueFields
-                        .Where(c => c.Value.ValueType != typeof(MdMetadata).Name)
+                        .Where(c => c.Value.ValueType != typeof(int).Name)
                         .Select(c => (new Pointer
                         {
                             MdLocator = this.MdLocator,
@@ -94,7 +94,7 @@ namespace SAFE.DataAccess
                 case MdType.Values:
                     return _valueFields
                         .Select(c => c.Value)
-                        .Where(c => c.ValueType != typeof(MdMetadata).Name);
+                        .Where(c => c.ValueType != typeof(int).Name);
                 default:
                     throw new ArgumentOutOfRangeException(nameof(Type));
             }

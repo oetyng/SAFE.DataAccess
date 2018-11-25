@@ -80,6 +80,8 @@ namespace SAFE.DataAccess
         // what we want to do; i.e. fetch all that there is for the key.
         public async Task<(IEnumerable<T> data, IEnumerable<string> errors)> GetAllValuesAsync<T>(string indexKey)
         {
+            if (!_dataTreeAddresses.ContainsKey(indexKey))
+                return (new List<T>(), new List<string>());
             if (!_dataTreeCache.ContainsKey(indexKey))
                 await LoadStoreAsync(indexKey).ConfigureAwait(false);
 
