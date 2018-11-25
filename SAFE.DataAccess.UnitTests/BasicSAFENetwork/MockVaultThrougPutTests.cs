@@ -33,7 +33,7 @@ namespace SAFE.DataAccess.UnitTests
         {
             try
             {
-                for (int i = 0; i < 1000; i++)
+                for (int i = 0; i < 100; i++)
                     await FillMd(i);
             }
             catch (Exception ex)

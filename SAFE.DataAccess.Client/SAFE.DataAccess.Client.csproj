@@ -1,11 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp2.0</TargetFramework>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SAFE.DataAccess.Common\SAFE.DataAccess.Common.csproj" />
+    <ProjectReference Include="..\SAFE.DataAccess.LocalDb\SAFE.DataAccess.LocalDb.csproj" />
     <ProjectReference Include="..\SAFE.DataAccess.Network\SAFE.DataAccess.Network.csproj" />
     <ProjectReference Include="..\SAFE.DataAccess\SAFE.DataAccess.csproj" />
   </ItemGroup>

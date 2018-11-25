@@ -17,6 +17,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Demos", "Demos", "{28DE24B3
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SAFE.DataAccess.Client", "SAFE.DataAccess.Client\SAFE.DataAccess.Client.csproj", "{D7D661A3-2D45-48FE-8916-010C4A6588DB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SAFE.DataAccess.LocalDb", "SAFE.DataAccess.LocalDb\SAFE.DataAccess.LocalDb.csproj", "{A47BFFFD-80C7-489A-AEE2-4514D8A8A699}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -47,6 +49,10 @@ Global
 		{D7D661A3-2D45-48FE-8916-010C4A6588DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D7D661A3-2D45-48FE-8916-010C4A6588DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D7D661A3-2D45-48FE-8916-010C4A6588DB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A47BFFFD-80C7-489A-AEE2-4514D8A8A699}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A47BFFFD-80C7-489A-AEE2-4514D8A8A699}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A47BFFFD-80C7-489A-AEE2-4514D8A8A699}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A47BFFFD-80C7-489A-AEE2-4514D8A8A699}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

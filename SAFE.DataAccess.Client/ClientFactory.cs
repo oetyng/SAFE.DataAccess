@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using SAFE.DataAccess.LocalDb;
+using System.Threading.Tasks;
 
 namespace SAFE.DataAccess.Client
 {
@@ -7,6 +8,11 @@ namespace SAFE.DataAccess.Client
         public static IClient GetInMemoryClient()
         {
             return new InMemClient();
+        }
+
+        public static IClient GetLocalDbClient()
+        {
+            return new LocalDbClient();
         }
 
         public static async Task<IClient> GetMockNetworkClient()
@@ -29,6 +35,33 @@ namespace SAFE.DataAccess.Client
         public InMemClient()
         {
             MdAccess.UseInMemoryDb();
+        }
+
+        public async Task<Result<Database>> GetOrAddDataBaseAsync(string dbName)
+        {
+            var indexLocation = new MdLocator(System.Text.Encoding.UTF8.GetBytes($"{dbName}_indexer"), DataProtocol.DEFAULT_PROTOCOL);
+            var indexMd = await MdAccess.LocateAsync(indexLocation).ConfigureAwait(false);
+            if (!indexMd.HasValue)
+                return Result.Fail<Database>(indexMd.ErrorCode.Value, indexMd.ErrorMsg);
+            var indexHead = new MdHead(indexMd.Value, dbName);
+            var indexer = await Indexer.GetOrAddAsync(indexHead);
+
+            var dbLocation = new MdLocator(System.Text.Encoding.UTF8.GetBytes(dbName), DataProtocol.DEFAULT_PROTOCOL);
+            var dbMd = await MdAccess.LocateAsync(dbLocation).ConfigureAwait(false);
+            if (!dbMd.HasValue)
+                return Result.Fail<Database>(dbMd.ErrorCode.Value, dbMd.ErrorMsg);
+            var dbHead = new MdHead(dbMd.Value, dbName);
+            var dbResult = await Database.GetOrAddAsync(dbHead, indexer);
+            return dbResult;
+        }
+    }
+
+    public class LocalDbClient : IClient
+    {
+        public LocalDbClient()
+        {
+            MdAccess.SetCreator((level) => Task.FromResult(LocalMd.Create(level)));
+            MdAccess.SetLocator((locator) => Task.FromResult(Result.OK(LocalMd.Locate(locator))));
         }
 
         public async Task<Result<Database>> GetOrAddDataBaseAsync(string dbName)

@@ -102,8 +102,8 @@ namespace SAFE.DataAccess
             if (!pointer.HasValue)
                 return pointer;
 
-            await IndexOnKey(type, key, pointer.Value).ConfigureAwait(false);
-            await TryIndexProperties(data, pointer.Value).ConfigureAwait(false);
+            //await IndexOnKey(type, key, pointer.Value).ConfigureAwait(false);
+            //await TryIndexProperties(data, pointer.Value).ConfigureAwait(false);
 
             return pointer;
         }
