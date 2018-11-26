@@ -91,6 +91,7 @@ namespace SAFE.DataAccess.FileSystems
             return dirResult;
         }
 
+        // Returns existing or creates new
         public async Task<Result<MdFileStream>> CreateFile(FileSystemPath path)
         {
             if (!_path.IsParentOf(path))
@@ -100,20 +101,18 @@ namespace SAFE.DataAccess.FileSystems
 
             var fileResult = await FindFileAsync(path);
             if (fileResult.HasValue)
-                return new ValueAlreadyExists<MdFileStream>(path.Path);
+                return Result.OK(fileResult.Value);
 
             await AddOrLoad(FILE_INFO_KEY);
-
+            
             var md = await MdAccess.CreateAsync(0);
             var info = SetupFileInfo(path, md);
             var value = new StoredValue(info);
             var pointer = await _dataTreeCache[FILE_INFO_KEY].AddAsync(path.Path, value);
             if (!pointer.HasValue)
                 return Result.Fail<MdFileStream>(pointer.ErrorCode.Value, pointer.ErrorMsg);
-
             await _indexer.IndexAsync(path.Path, pointer.Value);
             //ScheduleIndexing(path, pointer.Value);
-
             return Result.OK(new MdFileStream(info));
         }
 

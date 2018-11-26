@@ -14,7 +14,7 @@ namespace SAFE.DataAccess.FileSystems
             var dirLocation = new MdLocator(Encoding.UTF8.GetBytes(directoryPath), DataProtocol.DEFAULT_PROTOCOL);
             var dirMd = await MdAccess.LocateAsync(dirLocation).ConfigureAwait(false);
             if (!dirMd.HasValue)
-                return Result.Fail<Directory>(dirMd.ErrorCode.Value, dirMd.ErrorMsg);
+                dirMd = Result.OK(await MdAccess.CreateAsync(0));
             var dirHead = new MdHead(dirMd.Value, directoryPath);
             var dirResult = await Directory.GetOrAddAsync(dirHead, indexer.Value);
             return dirResult;
@@ -42,7 +42,7 @@ namespace SAFE.DataAccess.FileSystems
             var indexLocation = new MdLocator(Encoding.UTF8.GetBytes($"{directoryPath}_indexer"), DataProtocol.DEFAULT_PROTOCOL);
             var indexMd = await MdAccess.LocateAsync(indexLocation).ConfigureAwait(false);
             if (!indexMd.HasValue)
-                return Result.Fail<IIndexer>(indexMd.ErrorCode.Value, indexMd.ErrorMsg);
+                indexMd = Result.OK(await MdAccess.CreateAsync(0));
             var indexHead = new MdHead(indexMd.Value, directoryPath);
             var indexer = await Indexer.GetOrAddAsync(indexHead);
             return Result.OK((IIndexer)indexer);

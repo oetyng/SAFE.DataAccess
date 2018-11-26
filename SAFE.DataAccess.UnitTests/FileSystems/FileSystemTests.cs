@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using SAFE.DataAccess.FileSystems.IO;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SAFE.DataAccess.Client;
 
 namespace SAFE.DataAccess.FileSystems.UnitTests
 {
@@ -16,8 +17,11 @@ namespace SAFE.DataAccess.FileSystems.UnitTests
         [TestInitialize]
         public void TestInitialize()
         {
-            MdAccess.UseInMemoryDb();
-            FileSystem = FileSystem.GetOrAdd("/").Value;
+            //FileSystem = FileSystemFactory.CreateInMemory().Value;
+            FileSystem = FileSystemFactory.MockSAFENetwork()
+                .GetAwaiter()
+                .GetResult()
+                .Value;
         }
 
         [TestMethod]
