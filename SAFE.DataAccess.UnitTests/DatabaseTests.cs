@@ -12,18 +12,18 @@ namespace SAFE.DataAccess.UnitTests
     {
         IClient _client;
 
-        [TestInitialize]
-        public void TestInitialize()
-        {
-            //_client = ClientFactory.GetInMemoryClient();
-            _client = ClientFactory.GetLocalDbClient();
-        }
-
         //[TestInitialize]
-        //public async Task TestInitialize()
+        //public void TestInitialize()
         //{
-        //    _client = await ClientFactory.GetMockNetworkClient();
+        //    //_client = ClientFactory.GetInMemoryClient();
+        //    _client = ClientFactory.GetLocalDbClient();
         //}
+
+        [TestInitialize]
+        public async Task TestInitialize()
+        {
+            _client = await ClientFactory.GetMockNetworkClient();
+        }
 
         [TestMethod]
         public async Task DatabaseTests_getoradd_returns_database()

@@ -40,7 +40,9 @@ namespace SAFE.DataAccess
 
         async Task<Result<Pointer>> DirectlyAddToLeaf(string key, StoredValue value)
         {
-            if (_currentLeaf == null || _currentLeaf.IsFull)
+            if (_currentLeaf == null)
+                _currentLeaf = _head;
+            else if (_currentLeaf.IsFull)
             {
                 var result = await _head.AddAsync(key, value).ConfigureAwait(false);
                 var leafResult = await MdAccess.LocateAsync(result.Value.MdLocator);
@@ -48,8 +50,8 @@ namespace SAFE.DataAccess
                     _currentLeaf = leafResult.Value;
                 return result;
             }
-            else
-                return await _currentLeaf.AddAsync(key, value);
+            
+            return await _currentLeaf.AddAsync(key, value);
         }
 
         public Task<IEnumerable<StoredValue>> GetAllValuesAsync()

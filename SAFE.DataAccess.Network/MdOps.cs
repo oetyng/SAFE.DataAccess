@@ -15,10 +15,9 @@ namespace SAFE.DataAccess.Network
 
         MDataInfo _mdInfo;
         int _count;
-        MdType _type;
         int _level;
 
-        public MdType Type => _type;
+        public MdType Type => _level > 0 ? MdType.Pointers : MdType.Values;
         public int Count => _count;
         public int Level => _level;
         public bool IsFull => _count >= MdMetadata.Capacity;
@@ -530,6 +529,7 @@ namespace SAFE.DataAccess.Network
             {
                 await InsertEntriesAsync(entryActionsH, insertObj).ConfigureAwait(false);
                 await CommitEntryMutationAsync(_mdInfo, entryActionsH).ConfigureAwait(false);
+                _level = level;
                 ++_count;
             }
         }
