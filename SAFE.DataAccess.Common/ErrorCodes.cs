@@ -12,6 +12,6 @@ namespace SAFE.DataAccess
         public const int ARGUMENT_OUT_OF_RANGE = -7;
         public const int MULTIPLE_RESULTS = -8;
         public const int INVALID_OPERATION = -9;
-        //public const int DATA_NOT_FOUND = -6;
+        public const int DATA_NOT_FOUND = -10;
     }
 }

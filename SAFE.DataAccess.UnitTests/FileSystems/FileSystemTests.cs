@@ -33,6 +33,8 @@ namespace SAFE.DataAccess.FileSystems.UnitTests
                 Assert.IsTrue(FileSystem.Exists(RootFilePath));
 
                 xStream.Write(content, 0, content.Length);
+                //xStream.FlushAsync();
+                xStream.Flush();
             }
 
             // File should still exist and have content.
@@ -60,6 +62,7 @@ namespace SAFE.DataAccess.FileSystems.UnitTests
             using (var stream = FileSystem.CreateFile(RootFilePath))
             {
                 stream.Write(Encoding.UTF8.GetBytes("asdf"));
+                stream.Flush();
             }
 
             Assert.IsTrue(FileSystem.Exists(RootFilePath));
@@ -69,6 +72,7 @@ namespace SAFE.DataAccess.FileSystems.UnitTests
             using (var stream = FileSystem.CreateFile(RootFilePath))
             {
                 stream.Write(content);
+                stream.Flush();
             }
 
             Assert.IsTrue(FileSystem.Exists(RootFilePath));

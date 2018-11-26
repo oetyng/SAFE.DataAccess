@@ -5,57 +5,61 @@ namespace SAFE.DataAccess.FileSystems
 {
     public abstract class RecordInfo
     {
-        [NonSerialized]
-        protected IMd _md;
+        protected readonly Func<string, Result<StoredValue>> _infoReader;
+        protected readonly Func<string, StoredValue, Result<Pointer>> _infoWriter;
 
-        public RecordInfo(IMd md)
+        public RecordInfo(string path, MdLocator locator, 
+            Func<string, Result<StoredValue>> infoReader, Func<string, StoredValue, Result<Pointer>> infoWriter)
         {
-            _md = md;
+            Path = path;
+            Locator = locator;
+            _infoReader = infoReader;
+            _infoWriter = infoWriter;
         }
 
-        public MdLocator Locator => _md.MdLocator;
+        public string Path { get; }
+        public MdLocator Locator { get; }
     }
 
     public class DirectoryInfo : RecordInfo
     {
-        public DirectoryInfo(IMd md)
-               : base(md)
+        public DirectoryInfo(string path, MdLocator locator, 
+            Func<string, Result<StoredValue>> infoReader, Func<string, StoredValue, Result<Pointer>> infoWriter)
+               : base(path, locator, infoReader, infoWriter)
         { }
     }
 
     public class MdFileInfo : RecordInfo
     {
-        byte[] _content;
-
-        public MdFileInfo(IMd md)
-            : base(md)
+        public MdFileInfo(string path, MdLocator locator,
+            Func<string, Result<StoredValue>> infoReader, Func<string, StoredValue, Result<Pointer>> infoWriter)
+            : base(path, locator, infoReader, infoWriter)
         { }
 
-        public byte[] Content
-        {
-            get
-            {
-                if (_content == null)
-                {
-                    var contentResult = _md.GetValueAsync("Content").GetAwaiter().GetResult();
+        public byte[] Content { get; private set; } = new byte[0];
 
-                    if (!contentResult.HasValue)
-                        _content = new byte[0];
-                    else
-                        _content = contentResult.Value.Parse<byte[]>();
-                }
-                return _content;
-            }
-            set
+        public byte[] ReadContent()
+        {
+            if (Content.Length == 0)
             {
-                var data = new StoredValue(value);
-                var res = _md.SetAsync("Content", data).GetAwaiter().GetResult();
-                if (res.HasValue)
-                    _content = value;
+                var contentResult = _infoReader($"{Path}/Content");
+
+                if (!contentResult.HasValue)
+                    Content = new byte[0];
                 else
-                    throw new Exception(res.ErrorMsg);
+                    Content = contentResult.Value.Parse<byte[]>();
             }
+            return Content;
         }
 
+        public void WriteContent(byte[] value)
+        {
+            var data = new StoredValue(value);
+            var res = _infoWriter($"{Path}/Content", data);
+            if (res.HasValue)
+                Content = value;
+            else
+                throw new Exception(res.ErrorMsg);
+        }
     }
 }

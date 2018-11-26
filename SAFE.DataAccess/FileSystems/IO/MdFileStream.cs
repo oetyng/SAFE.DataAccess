@@ -7,11 +7,7 @@ namespace SAFE.DataAccess.FileSystems
     {
         private readonly MdFileInfo _file;
 
-        public byte[] Content
-        {
-            get { return _file.Content; }
-            private set { _file.Content = value; }
-        }
+        public byte[] Content { get; private set; }
 
         public override bool CanRead
         {
@@ -42,6 +38,7 @@ namespace SAFE.DataAccess.FileSystems
 
         public override void Flush()
         {
+            _file.WriteContent(Content);
         }
 
         public override long Seek(long offset, SeekOrigin origin)
@@ -55,6 +52,7 @@ namespace SAFE.DataAccess.FileSystems
 
         public override void SetLength(long value)
         {
+            Content = _file.ReadContent();
             int newLength = (int)value;
             byte[] newContent = new byte[newLength];
             Buffer.BlockCopy(Content, 0, newContent, 0, Math.Min(newLength, (int)Length));
@@ -63,6 +61,7 @@ namespace SAFE.DataAccess.FileSystems
 
         public override int Read(byte[] buffer, int offset, int count)
         {
+            Content = _file.ReadContent();
             int mincount = Math.Min(count, Math.Abs((int)(Length - Position)));
             Buffer.BlockCopy(Content, (int)Position, buffer, offset, mincount);
             Position += mincount;
@@ -75,6 +74,7 @@ namespace SAFE.DataAccess.FileSystems
                 SetLength(Position + count);
             Buffer.BlockCopy(buffer, offset, Content, (int)Position, count);
             Position += count;
+            //_file.WriteContent(Content);
         }
     }
 }

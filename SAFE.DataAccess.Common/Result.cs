@@ -94,10 +94,10 @@ namespace SAFE.DataAccess
         { }
     }
 
-    //public class DataNotFound<T> : Result<T>
-    //{
-    //    public DataNotFound(string info = null)
-    //        : base(default(T), false, ErrorCodes.DATA_NOT_FOUND, $"Data not found! {info}")
-    //    { }
-    //}
+    public class DataNotFound<T> : Result<T>
+    {
+        public DataNotFound(string info = null)
+            : base(default(T), false, ErrorCodes.DATA_NOT_FOUND, $"Data not found! {info}")
+        { }
+    }
 }

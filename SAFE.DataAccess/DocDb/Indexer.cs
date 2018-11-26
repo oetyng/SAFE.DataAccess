@@ -89,16 +89,16 @@ namespace SAFE.DataAccess
                 .GetAllValuesAsync().ConfigureAwait(false)) // in an IndexDb, leaf values are stored Pointers,
                 .Select(c => c.Payload.Parse<Pointer>()); // as opposed to in ordinary Database, where leaf values are of type Value
 
-            var results = await Task.WhenAll(pointers
+            var results = await Task.WhenAll(pointers // The indexer fetches all pointers in the tree of the indexKey
                 .Select(async c =>
                 {
-                    var mdResult = await MdAccess.LocateAsync(c.MdLocator).ConfigureAwait(false);
+                    var mdResult = await MdAccess.LocateAsync(c.MdLocator).ConfigureAwait(false); // Then it locates the md with the value which the MdEntryPointer points to
                     if (!mdResult.HasValue)
                         return Result.Fail<StoredValue>(mdResult.ErrorCode.Value, mdResult.ErrorMsg);
-                    return await mdResult.Value.GetValueAsync(c.MdKey).ConfigureAwait(false);
+                    return await mdResult.Value.GetValueAsync(c.MdKey).ConfigureAwait(false); // and finally gets the value from that md, i.e. the value which the MdEntryPointer points to
                 }));
 
-            var data = results.Where(c => c.HasValue)
+            var data = results.Where(c => c.HasValue) // in case this is a uique index, it will only contain 1 result, otherwise, any number.
                 .Select(c => c.Value)
                 .Select(c => c.Payload.Parse<T>());
             var errors = results.Where(c => !c.HasValue)

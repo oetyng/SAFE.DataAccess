@@ -105,7 +105,7 @@ namespace SAFE.DataAccess.FileSystems
             await AddOrLoad(FILE_INFO_KEY);
 
             var md = await MdAccess.CreateAsync(0);
-            var info = new MdFileInfo(md);
+            var info = SetupFileInfo(path, md);
             var value = new StoredValue(info);
             var pointer = await _dataTreeCache[FILE_INFO_KEY].AddAsync(path.Path, value);
             if (!pointer.HasValue)
@@ -135,7 +135,7 @@ namespace SAFE.DataAccess.FileSystems
 
             await AddOrLoad(DIR_INFO_KEY);
 
-            var info = new DirectoryInfo(res.Value._info);
+            var info = SetupDirectoryInfo(path, res.Value._info);
 
             var value = new StoredValue(info.Locator);
             var pointer = await _dataTreeCache[DIR_INFO_KEY].AddAsync(path.Path, value);
@@ -195,15 +195,16 @@ namespace SAFE.DataAccess.FileSystems
             if (!path.IsFile)
                 return new InvalidOperation<MdFileInfo>("Path is not a file");
 
-            var (data, errors) = await _indexer.GetAllValuesAsync<MdLocator>(path.Path).ConfigureAwait(false);
+            // a stored MdFileInfo is a reference (i.e. the locator) to the actual Md holding data
+            var (data, errors) = await _indexer.GetAllValuesAsync<MdFileInfo>(path.Path).ConfigureAwait(false);
             var list = data.ToList();
             if (list.Count == 0)
                 return new KeyNotFound<MdFileInfo>(string.Join(',', errors));
             if (list.Count > 1)
                 return new MultipleResults<MdFileInfo>($"Expected 1 result, found: {list.Count}.");
 
-            var md = await MdAccess.LocateAsync(list.Single());
-            return Result.OK(new MdFileInfo(md.Value));
+            var md = await MdAccess.LocateAsync(list.Single().Locator); // finally locate the actual md, which our stored MdFileInfo uses to 
+            return Result.OK(SetupFileInfo(path, md.Value)); // Get / Set actions will be injected into the encapsulating MdFileInfo, which acts directly upon its Md
         }
 
         async Task<Result<DirectoryInfo>> FindDirectoryInfoAsync(FileSystemPath path)
@@ -213,15 +214,45 @@ namespace SAFE.DataAccess.FileSystems
             if (!path.IsDirectory)
                 return new InvalidOperation<DirectoryInfo>("Path is not a directory");
 
-            var (data, errors) = await _indexer.GetAllValuesAsync<MdLocator>(path.Path).ConfigureAwait(false);
+            var (data, errors) = await _indexer.GetAllValuesAsync<DirectoryInfo>(path.Path).ConfigureAwait(false);
             var list = data.ToList();
             if (list.Count == 0)
                 return new KeyNotFound<DirectoryInfo>(string.Join(',', errors));
             if (list.Count > 1)
                 return new MultipleResults<DirectoryInfo>($"Expected 1 result, found: {list.Count}.");
 
-            var md = await MdAccess.LocateAsync(list.Single());
-            return Result.OK(new DirectoryInfo(md.Value));
+            var md = await MdAccess.LocateAsync(list.Single().Locator);
+            return Result.OK(SetupDirectoryInfo(path, md.Value));
+        }
+
+        // Get / Set actions will be injected into the encapsulating MdFileInfo, which acts directly upon its Md
+        MdFileInfo SetupFileInfo(FileSystemPath path, IMd md)
+        {
+            var info = new MdFileInfo(path.Path, md.MdLocator,
+                (key) => 
+                    md.GetValueAsync(key).GetAwaiter().GetResult(),
+                (key, val) => 
+                {
+                    var pointer = md.SetAsync(key, val).GetAwaiter().GetResult();
+                    if (!pointer.HasValue)
+                        return pointer;
+                    return pointer;
+                });
+            return info;
+        }
+
+        DirectoryInfo SetupDirectoryInfo(FileSystemPath path, IMd md)
+        {
+            var info = new DirectoryInfo(path.Path, md.MdLocator,
+                (key) => md.GetValueAsync(key).GetAwaiter().GetResult(),
+                (key, val) =>
+                {
+                    var pointer = md.SetAsync(key, val).GetAwaiter().GetResult();
+                    if (!pointer.HasValue)
+                        return pointer;
+                    return pointer;
+                });
+            return info;
         }
 
         async Task AddOrLoad(string store)
