@@ -227,31 +227,16 @@ namespace SAFE.DataAccess.FileSystems
         // Get / Set actions will be injected into the encapsulating MdFileInfo, which acts directly upon its Md
         MdFileInfo SetupFileInfo(FileSystemPath path, IMd md)
         {
-            var info = new MdFileInfo(path.Path, md.MdLocator,
-                (key) => 
-                    md.GetValueAsync(key).GetAwaiter().GetResult(),
-                (key, val) => 
-                {
-                    var pointer = md.SetAsync(key, val).GetAwaiter().GetResult();
-                    if (!pointer.HasValue)
-                        return pointer;
-                    return pointer;
-                });
-            return info;
+            return new MdFileInfo(path.Path, md.MdLocator,
+                (key) => md.GetValueAsync(key).GetAwaiter().GetResult(),
+                (key, val) => md.SetAsync(key, val).GetAwaiter().GetResult());
         }
 
         DirectoryInfo SetupDirectoryInfo(FileSystemPath path, IMd md)
         {
-            var info = new DirectoryInfo(path.Path, md.MdLocator,
+            return new DirectoryInfo(path.Path, md.MdLocator,
                 (key) => md.GetValueAsync(key).GetAwaiter().GetResult(),
-                (key, val) =>
-                {
-                    var pointer = md.SetAsync(key, val).GetAwaiter().GetResult();
-                    if (!pointer.HasValue)
-                        return pointer;
-                    return pointer;
-                });
-            return info;
+                (key, val) => md.SetAsync(key, val).GetAwaiter().GetResult());
         }
 
         async Task AddOrLoad(string store)
